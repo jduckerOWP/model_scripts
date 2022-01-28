@@ -1,0 +1,514 @@
+"""
+Waterlevel and tidal constituent solver/plotter.
+
+Use this script to plot water level and optionally solve and plot tidal constitents.
+
+Example Usages:
+Plot waterlevel only:
+python wl_plotter.py --output out_plots <dflow_history_path> <obs_path>
+
+To solve for tidal constituents and plot results
+python wl_plotter.py -t --output out_plots <dflow_history_path> <obs_path>
+
+External Dependencies:
+  xarray
+  numpy
+  pandas
+  scipy
+  matplotlib
+  pytides (from https://github.com/groutr/pytides)
+"""
+
+import xarray as xr
+import pandas as pd
+import numpy as np
+import re
+import time
+import math
+import argparse
+import datetime
+import matplotlib.pyplot as plt
+import pathlib
+from dataclasses import dataclass
+from enum import Enum, auto
+
+from pytides.tide import Tide
+from pytides.astro import astro
+from pytides.constituent import noaa as noaa_constituents
+from scipy.stats import pearsonr
+
+# Turn off SettingWithCopyWarning (we are careful not to do that)
+pd.options.mode.chained_assignment = None
+
+MINHOURS = {
+	'M2': 12,
+	'M4': 12,
+	'M6': 12,
+	'M8': 12,
+	'K1': 27,
+	'S6': 118,
+	'2MK3': 329,
+	'MK3': 329,
+	'O1': 329,
+	'OO1':  329,
+	'2Q1': 332,
+	'2SM2': 356,
+	'MS4': 356,
+	'S2': 356,
+	'S4': 356,
+	'M1': 656,
+	'M3': 656,
+	'J1': 663,
+	'MN4': 663,
+	'N2': 663,
+	'Q1': 663,
+	'L2': 764,
+	'MM': 764,
+	'MU2': 764,
+	'K2': 4383,
+	'MF': 4383,
+	'MSF': 4383,
+	'P1': 4383,
+	'2N2': 4942,
+	'LAMBDA2': 4942,
+	'NU2': 4942,
+	'RHO1': 4942
+}
+
+PLOT_CONSTITUENTS = ['M2', 'S2', 'N2', 'K2', 'O1', 'K1', 'Q1', 'P1']
+
+class Datum(Enum):
+    MSL = auto()
+    NAVD88 = auto()
+
+@dataclass
+class TSData:
+    datum: Datum
+    station_id: str
+    data: pd.DataFrame
+    bias_correct: bool = False
+
+    def __init__(self, datum, station_id, data, bias_correct=False):
+        self.datum = datum
+        self.station_id = station_id
+        self.data = data.copy()
+        self.bias_correct = bias_correct
+
+        if bias_correct:
+            self.data.observation += (data.model - data.observation).mean()
+
+    def __len__(self):
+        return len(self.data)
+
+    def __hash__(self) -> int:
+        return int(self.station_id)
+
+    @property
+    def predicted(self):
+        return self.data.model
+
+    @property
+    def observed(self):
+        return self.data.observation
+
+    def bias(self):
+        return (self.predicted - self.observed).mean()
+
+    def rmse(self):
+        return math.sqrt(np.square(self.predicted - self.observed).mean())
+
+    def skill(self):
+        n = (np.square(self.predicted - self.observed)).sum()
+        om = self.observed.mean()
+        d = (self.predicted - om).abs() + (self.observed - om).abs()
+        d = np.square(d).sum()
+        return 1 - n/d
+    
+    def r(self):
+        r1 = (self.predicted - self.predicted.mean())/self.predicted.std()
+        r2 = (self.observed - self.observed.mean())/self.observed.std()
+        return 1/(len(self)-1) * np.sum(r1 * r2)
+
+    def corr(self):
+        return pearsonr(self.predicted, self.observed)
+
+    def range(self):
+        return self.data.max() - self.data.min()
+
+    def nrmse(self):
+        return 100 * self.rmse()/self.range().observation
+
+
+def mae_phase(model, obs):
+    tmp = np.abs(phase_correct(obs - model))
+    return np.sum(tmp)/len(tmp)
+
+
+def mre(model, obs):
+    tmp = np.abs(obs - model)/obs
+    return np.sum(tmp)/len(tmp)
+
+
+def mean_rmse(Am, An, Pm, Pn):
+    tmp = 0.5 * (Am ** 2 + An ** 2) - Am * An * np.cos(np.pi*phase_correct(Pm - Pn)/180)
+    return np.sum(np.sqrt(tmp))/len(tmp)
+
+
+def phase_correct(pdiff):
+    """Correct phase difference"""
+    pdiff[pdiff > 180] = 360 - pdiff[pdiff > 180]
+    pdiff[pdiff < -180] = 360 + pdiff[pdiff < -180]
+    return pdiff
+
+
+def get_options():
+    parser = argparse.ArgumentParser()
+    
+    parser.add_argument('dflow_history', type=pathlib.Path, help='DFlow history NetCDF')
+    parser.add_argument('obs_path', type=pathlib.Path, help="Path to observation files")
+    parser.add_argument('--output', default=pathlib.Path(), type=pathlib.Path, help="Output directory")
+    parser.add_argument('-t', '--tide', action='store_true', default=False, help='Solve tidal for tidal constituents')
+    parser.add_argument('-b', '--bias-correct', action='store_true', help="Bias correct all stations")
+    return parser.parse_args()
+
+def tidal_analysis(d):
+    newdata = d.data
+    t = newdata.index.to_pydatetime()
+    thrs = (t[-1] - t[0]).total_seconds() / 3600
+    _constituents = []
+    for c in noaa_constituents:
+        minh = MINHOURS.get(str(c))
+        if minh and thrs >= minh:
+            _constituents.append(c)
+        elif minh is None and thrs >= 24*366:
+            _constituents.append(c)
+    _cstrs = list(map(str, _constituents))
+
+    start = time.perf_counter()
+    tide = Tide.decompose(newdata.model.values, t, constituents=_constituents)
+    print(d.station_id, "Model solve: ", time.perf_counter() - start, "for", _cstrs)
+    data = ((x['constituent'].name, 
+            x['constituent'].speed(astro(t[0])), 
+            x['amplitude'], 
+            x['phase']) for x in tide.model)
+    model_rv = pd.DataFrame(list(data), columns=['constituent', 'speed', 'amplitude', 'phase'])
+    model_rv = model_rv.set_index('constituent')
+
+    water_lev = d.observed
+    t = water_lev.index.to_pydatetime()
+    start = time.perf_counter()
+    tide = Tide.decompose(water_lev.values, t, constituents=_constituents)
+    print(d.station_id, "observed solve: ", time.perf_counter() - start, "for", _cstrs)
+
+    data = ((x['constituent'].name, 
+            x['constituent'].speed(astro(t[0])),
+            x['amplitude'], 
+            x['phase']) for x in tide.model)
+    
+    obs_rv = pd.DataFrame(list(data), columns=['constituent', 'speed', 'amplitude', 'phase'])
+    obs_rv = obs_rv.set_index('constituent')
+    return model_rv, obs_rv
+
+def tide_plots(model_tide, obs_tide, out_path, station_id):
+    model_tide.to_csv(out_path/f"{station_id}_model.csv")
+    obs_tide.to_csv(out_path/f"{station_id}_obs.csv")
+    # Select only the plotting constituents if they exist
+    mt = model_tide.loc[model_tide.index.intersection(PLOT_CONSTITUENTS)]
+    ot = obs_tide.loc[obs_tide.index.intersection(PLOT_CONSTITUENTS)]
+    if mt.empty or ot.empty:
+        return
+    
+    mt['phase_hr'] = mt['phase']/mt['speed']
+    ot['phase_hr'] = ot['phase']/ot['speed']
+    fig, axs = plt.subplots(1, 3, figsize=(20, 10))
+    fig.tight_layout()
+    fig.suptitle(f"NOAA Station {station_id}", size=20, fontweight="bold")
+    
+    # Amplitude
+    ax = axs[0]
+    ax.set_aspect('equal')
+    m, o = mt['amplitude'].align(ot['amplitude'])
+    axlim = maxlim(m, o)
+    ax.set_xlim([0, axlim])
+    ax.set_ylim([0, axlim])
+    ax.set_xlabel("Amplitude (m) - NOAA observation")
+    ax.set_ylabel("Amplitude (m) - Model prediction")
+    ax.plot([0, axlim], [0, axlim], 'k--', alpha=.5)
+    ax.scatter(o.values, m.values)
+    for x, y, label in zip(o, m, m.index):
+        ax.text(x, y, label, size=15)
+
+    ax = axs[1]
+    ax.set_aspect('equal')
+    m, o = mt['phase'].align(ot['phase'])
+    axlim = maxlim(m, o)
+    ax.set_xlim([0, axlim])
+    ax.set_ylim([0, axlim])
+    ax.set_xlabel('Phase (deg.) - NOAA prediction')
+    ax.set_ylabel('Phase (deg.) - Model results')
+    ax.plot([0, axlim], [0, axlim], 'k--', alpha=.5)
+    ax.scatter(o.values, m.values)
+    for x, y, label in zip(o, m, m.index):
+        ax.text(x, y, label, size=15)
+
+    ax = axs[2]
+    ax.set_aspect('equal')
+    m, o = mt['phase_hr'].align(ot['phase_hr'])
+    axlim = maxlim(m, o)
+    ax.set_xlim([0, axlim])
+    ax.set_ylim([0, axlim])
+    ax.set_xlabel('Phase (hr.) - NOAA prediction')
+    ax.set_ylabel('Phase (hr.) - Model results')
+    ax.plot([0, axlim], [0, axlim], 'k--', alpha=.5)
+    ax.scatter(o.values, m.values)
+    for x, y, label in zip(o, m, m.index):
+        ax.text(x, y, label, size=15)
+    plt.savefig(out_path/f"{station_id}_tidal.png", dpi=200, bbox_inches="tight")
+    plt.close(fig)
+
+
+def tidal_error(model, obs, out_path):
+    model = model[model.constituent.isin(PLOT_CONSTITUENTS)]
+    obs = obs[obs.constituent.isin(PLOT_CONSTITUENTS)]
+    M = model.pivot(index='station', columns='constituent', values=['phase', 'amplitude'])
+    O = obs.pivot(index='station', columns='constituent', values=['phase', 'amplitude'])
+
+    M.to_csv(out_path/"Model_solved_tidal.csv")
+    O.to_csv(out_path/"NOAA_solved_tidal.csv")
+
+
+    _const = M.columns.get_level_values('constituent').unique()
+    stats = pd.DataFrame(index=_const, columns=['MAE', 'MRE', 'MRMSE'])
+
+    for c in _const:
+        stats.loc[c, "MAE"] = mae_phase(M[("phase", c)], O[("phase", c)])
+
+    for c in _const:
+        stats.loc[c, "MRE"] = mre(M[("amplitude", c)], O[("amplitude", c)])
+
+    for c in _const:
+        x = ("amplitude", c)
+        y = ("phase", c)
+        stats.loc[c, "MRMSE"] = mean_rmse(M[x], O[x], M[y], O[y])
+
+    stats.to_csv(out_path/"Mean_stats.csv")
+
+
+def amplitude_plot(model, obs, out_path):
+    ref_lines = {'linewidth': 1, 'alpha': .3}
+    data_opts = {'markeredgecolor': 'k', 
+                'color': 'b', 
+                'marker': 'o', 
+                'markersize': 5,
+                'linestyle': ''}
+    fig, axs = plt.subplots(1, 2, figsize=(12, 6))
+    for c in PLOT_CONSTITUENTS:
+        M = model[model.constituent == c]
+        O = obs[obs.constituent == c]
+        if M.empty or O.empty:
+            continue
+        
+        print("Plotting", c, "phase amplitude")
+        
+        fig.suptitle(f"{c} constituent", size=20, fontweight='bold')
+
+        ax = axs[0]
+        maxav = 1.2 * max(M.amplitude.max(), O.amplitude.max())
+        axlim = max(round(maxav, 1), 0.05)
+        ax.set_xlim([0, axlim])
+        ax.set_ylim([0, axlim])
+        ax.set_xlabel("Amplitude (m) - NOAA", size=12)
+        ax.set_ylabel("Amplitude (m) - Model", size=12)
+        ax.plot([0, axlim], [0, axlim], 'k', **ref_lines)
+        ax.plot([0, axlim], [0, 0.95*axlim], 'k--', **ref_lines)
+        ax.plot([0, axlim], [0, 0.9*axlim], 'k:', **ref_lines)
+        ax.plot([0, 0.95*axlim], [0, axlim], 'k--', **ref_lines)
+        ax.plot([0, 0.9*axlim], [0, axlim], 'k:', **ref_lines)
+        ax.plot(O.amplitude, M.amplitude, **data_opts)
+        tmp = pearsonr(M.amplitude, O.amplitude)[0]
+        ax.annotate(f"Corr: {round(tmp, 3)}", xy=(0.8, 0.03), xycoords='axes fraction', fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
+
+
+        ax = axs[1]
+        diff = M.phase - O.phase
+        M.loc[diff < -180, "phase"] = M.loc[diff < -180, "phase"] + 360
+        O.loc[diff > 180, "phase"]  = O.loc[diff > 180, "phase"] + 360
+        axlim = 400
+        ax.set_xlim([0, axlim])
+        ax.set_ylim([0, axlim])
+        ax.set_xlabel("Phase (deg) - NOAA", size=12)
+        ax.set_ylabel("Phase (deg) - Model", size=12)
+        ax.plot([0,axlim],[0,axlim],'k', **ref_lines)
+        ax.plot([10,axlim],[0,axlim-10],'k--', **ref_lines)
+        ax.plot([20,axlim],[0,axlim-20],'k:', **ref_lines)
+        ax.plot([0,axlim-10],[10,axlim],'k--', **ref_lines)
+        ax.plot([0,axlim-20],[20,axlim],'k:', **ref_lines)
+        ax.plot(O.phase, M.phase, **data_opts)
+        tmp = pearsonr(M.phase, O.phase)[0]
+        ax.annotate(f"Corr: {round(tmp, 3)}", xy=(0.8, 0.03), xycoords='axes fraction', fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
+
+        plt.savefig(out_path/f"{c}_AP_Comparison.png", dpi=600, bbox_inches='tight')
+        axs[0].cla()
+        axs[1].cla()
+    plt.close(fig)
+
+
+def site_correspondence(station_names, station_files):
+    """Match station names to station data files
+
+    Args:
+        station_names (list): Station names from DFlow history
+        station_files (list): List of files to correspond
+
+    Returns:
+        dict: correspondence map
+    """
+    first_digits = re.compile(r'(\d+)_*(NAVD|MSL)?')
+    station_numbers = {}
+    for s in station_names:
+        s = s.decode()
+        if m := first_digits.search(s):
+            sid = int(m.group(1))
+            station_numbers[sid] = m.group(2)
+
+    rv = {}
+    for f in station_files:
+        if m := first_digits.search(f.stem):
+            mi = int(m.group(1))
+            if mi in station_numbers:
+                datum = station_numbers[mi]
+                rv[mi] = (f, datum)
+    return rv
+
+def open_nc(filename):
+    with xr.open_dataset(filename, decode_cf=True, use_cftime=True) as DS:
+        #DS = DS.resample(time='6min').nearest()
+        try:
+            obs = DS["water_surface_height_above_reference_datum"]
+            obs = obs.drop_vars(['altitude', 'latitude', 'longitude'])
+            obsdf = obs.to_dataframe()
+            obsdf.index = DS.indexes['time'].to_datetimeindex()
+            return obsdf
+        except KeyError:
+            return pd.DataFrame()
+        
+
+def open_csv(filename):
+    obs_ds = pd.read_csv(filename, infer_datetime_format=True, parse_dates=True, index_col=0)
+    obs = obs_ds[" Prediction"]
+    return obs
+
+
+def maxlim(model, obs):
+    maxav = 1.2 * max(model.max(), obs.max())
+    axlim = max(round(maxav, 1), 0.1)
+    return axlim
+
+    
+def create_ts_dataframe(history_files, observation_path, out_path, tide=True, bias_correct=False):
+    twelve = datetime.timedelta(hours=12)
+    summary = []
+    tidal_summary = []
+    for hs in history_files:
+        with xr.open_dataset(hs) as DS:
+            station_map = site_correspondence(DS.station_name.values.tolist(), list(observation_path.iterdir()))
+            
+            lut = dict(zip(DS.station_name.values, DS.stations.values))
+            for col, (fn, datum) in station_map.items():
+                if datum is None:
+                    sn = bytes(str(col), encoding='ascii')
+                else:
+                    sn = bytes(f'{col}_{datum}', encoding='ascii')
+
+                # Get waterlevel for the station from dflow
+                try:
+                    ds_key = lut[sn]
+                except KeyError:
+                    ds_key = lut[bytes(f"USGS_FEV_{sn.decode()}", 'ascii')]
+
+                model = DS.loc[{'stations': ds_key}]['waterlevel']
+                if np.isnan(model.values).all():
+                    continue
+                model = model.drop_vars(['station_x_coordinate', 'station_y_coordinate', 'station_name'])
+                model = model.to_dataframe()
+
+                T = model.index[model.index >= model.index[0]+twelve]
+                # drop first twelve hours of model to remove warmup effects
+                model = model.loc[T]
+
+                # Get the observation data and resample to to 5min
+                if fn.suffix == ".nc":
+                    obs = open_nc(fn)
+                elif fn.suffix == ".csv":
+                    obs = open_csv(fn)
+                else:
+                    print("Unrecognized suffix", fn.suffix)
+                    continue
+                
+                # At times obs is malformed csv, so we check if len == 1.
+                if obs.empty or len(obs) == 1 or model.empty:
+                    continue
+                sn = sn.decode()
+                
+                model = model.asfreq('1H')
+                obs = obs.asfreq('1H')
+                joined = model.join(obs, how='inner').sort_index()
+                joined = joined.rename(columns={'waterlevel': 'model', "water_surface_height_above_reference_datum": "observation", " Prediction": "observation", " Water Level": "observation"})
+                if joined.empty:
+                    print("Joined dataframe is empty")
+                    continue
+                
+                BC = bias_correct or (datum == "MSL")
+                d = TSData(datum, str(col), joined, bias_correct=BC)
+
+                print("writing and plotting", d.station_id)
+                d.data.to_csv(out_path/f'{d.station_id}.csv')
+                fig = plt.figure(figsize=(12, 6))
+                ax = plt.gca()
+
+                ax.plot_date(d.data.index, d.observed, 'r', marker=',', linestyle='-', label=d.observed.name)
+                ax.plot_date(d.data.index, d.predicted, 'b', marker=',', linestyle='-', label=d.predicted.name)
+                ax.legend(loc='upper right')
+                ax.grid()
+                ax.set_title(f"{d.station_id} (Datum: {d.datum})", size=20)
+
+                ax.set_ylabel("water level [m]")
+                ax.set_xlabel("Date")
+                measures = (d.bias(), d.corr()[0], d.rmse(), d.nrmse(), d.skill())
+                summary.append((d.station_id,) + measures)
+                # add timeseries statistics
+                ax.annotate(f"Bias {round(measures[0], 3)}", xy=(0.85, 0.15), xycoords="axes fraction", fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
+                ax.annotate(f"Corr {round(measures[1], 3)}", xy=(0.85, 0.12), xycoords="axes fraction", fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
+                ax.annotate(f"RMSE {round(measures[2], 3)}", xy=(0.85, 0.09), xycoords="axes fraction", fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
+                ax.annotate(f"NRMSE {round(measures[3], 3)}", xy=(0.85, 0.06), xycoords="axes fraction", fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
+                ax.annotate(f"Skill {round(measures[4], 3)}", xy=(0.85, 0.03), xycoords="axes fraction", fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
+                plt.savefig(out_path/f"{d.station_id}.png", bbox_inches='tight', dpi=300)
+                plt.close(fig)
+
+                if tide:
+                    mt, ot = tidal_analysis(d)
+                    tide_plots(mt, ot, out_path, d.station_id)
+                    mt["station"] = d.station_id
+                    ot["station"] = d.station_id
+                    tidal_summary.append((mt, ot))
+
+    #Filter summary and tidal_summary (if necessary) by skill
+    summary_df = pd.DataFrame(summary, columns=['station_id', 'bias', 'corr', 'rmse', 'nrmse', 'skill'])
+    summary_df["idx"] = list(range(len(summary)))
+    summary_df = summary_df.groupby('station_id').apply(lambda x: x.iloc[x.skill.argmax()])
+    sel_idx = set(summary_df["idx"])
+    summary_df.drop(columns=["idx"]).to_csv(out_path/"summary.csv", index=False)
+
+    model_df = pd.concat([x[0] for x in map(tidal_summary.__getitem__, sel_idx)]).reset_index()
+    obs_df = pd.concat([x[1] for x in map(tidal_summary.__getitem__, sel_idx)]).reset_index()
+
+    amplitude_plot(model_df, obs_df, out_path)
+    tidal_error(model_df, obs_df, out_path)
+
+if __name__ == "__main__":
+    args = get_options()
+    create_ts_dataframe(args.dflow_history.glob("*.nc"), args.obs_path, args.output, 
+                    tide=args.tide, bias_correct=args.bias_correct)
+                
+            
+            
