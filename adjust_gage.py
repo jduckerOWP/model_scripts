@@ -38,6 +38,9 @@ def ft3_to_m3(vals):
 
 
 def load_corrections(corrections):
+    """Setup worker environment.
+    A global variable used here to avoid serializing and passing corrections
+    file to each worker process"""
     global CORRECTIONS
     CORRECTIONS = pd.read_csv(corrections, index_col='Gauge ID').sort_index()
 
