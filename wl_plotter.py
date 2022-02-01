@@ -40,6 +40,8 @@ from scipy.stats import pearsonr
 # Turn off SettingWithCopyWarning (we are careful not to do that)
 pd.options.mode.chained_assignment = None
 
+# Minimum number of hours in timeseries needed to differentiate 
+# tidal constituents from each other.
 MINHOURS = {
 	'M2': 12,
 	'M4': 12,
@@ -75,6 +77,7 @@ MINHOURS = {
 	'RHO1': 4942
 }
 
+# Set of constituents to plot
 PLOT_CONSTITUENTS = ['M2', 'S2', 'N2', 'K2', 'O1', 'K1', 'Q1', 'P1']
 
 class Datum(Enum):
@@ -83,6 +86,12 @@ class Datum(Enum):
 
 @dataclass
 class TSData:
+    """Store data for a station
+
+    Dataframe is structured as observed/predicted data in columns.
+    Several methods are provided to compute statistics between
+    the observed data and predicted data.
+    """
     datum: Datum
     station_id: str
     data: pd.DataFrame
@@ -155,7 +164,7 @@ def mean_rmse(Am, An, Pm, Pn):
 
 
 def phase_correct(pdiff):
-    """Correct phase difference"""
+    """Correct phase difference so all readings are in [0, 360]"""
     pdiff[pdiff > 180] = 360 - pdiff[pdiff > 180]
     pdiff[pdiff < -180] = 360 + pdiff[pdiff < -180]
     return pdiff
@@ -172,6 +181,16 @@ def get_options():
     return parser.parse_args()
 
 def tidal_analysis(d):
+    """Solve for tidal constituents.
+
+    Args:
+        d (TSData): [description]
+
+    Returns:
+        tuple: (DataFrame, DataFrame)
+    """
+    # Filter list of constituents by MIN_HOURS
+    # to only solve for constituents for which we have enough data.
     newdata = d.data
     t = newdata.index.to_pydatetime()
     thrs = (t[-1] - t[0]).total_seconds() / 3600
@@ -179,13 +198,16 @@ def tidal_analysis(d):
     for c in noaa_constituents:
         minh = MINHOURS.get(str(c))
         if minh and thrs >= minh:
+            # If we have enough data (higher than minh)
             _constituents.append(c)
         elif minh is None and thrs >= 24*366:
+            # If we have 1 year of data, add constituent
             _constituents.append(c)
     _cstrs = list(map(str, _constituents))
 
+    # Solve for predicted (model) constituents
     start = time.perf_counter()
-    tide = Tide.decompose(newdata.model.values, t, constituents=_constituents)
+    tide = Tide.decompose(d.predicted.values, t, constituents=_constituents)
     print(d.station_id, "Model solve: ", time.perf_counter() - start, "for", _cstrs)
     data = ((x['constituent'].name, 
             x['constituent'].speed(astro(t[0])), 
@@ -194,6 +216,7 @@ def tidal_analysis(d):
     model_rv = pd.DataFrame(list(data), columns=['constituent', 'speed', 'amplitude', 'phase'])
     model_rv = model_rv.set_index('constituent')
 
+    # Solve for constituents in observed values
     water_lev = d.observed
     t = water_lev.index.to_pydatetime()
     start = time.perf_counter()
@@ -210,9 +233,11 @@ def tidal_analysis(d):
     return model_rv, obs_rv
 
 def tide_plots(model_tide, obs_tide, out_path, station_id):
+    # Write tidal constitent csv reports
     model_tide.to_csv(out_path/f"{station_id}_model.csv")
     obs_tide.to_csv(out_path/f"{station_id}_obs.csv")
-    # Select only the plotting constituents if they exist
+
+    # Select only the plotting constituents if they exist to prep for plotting
     mt = model_tide.loc[model_tide.index.intersection(PLOT_CONSTITUENTS)]
     ot = obs_tide.loc[obs_tide.index.intersection(PLOT_CONSTITUENTS)]
     if mt.empty or ot.empty:
@@ -224,7 +249,7 @@ def tide_plots(model_tide, obs_tide, out_path, station_id):
     fig.tight_layout()
     fig.suptitle(f"NOAA Station {station_id}", size=20, fontweight="bold")
     
-    # Amplitude
+    # Amplitude plot
     ax = axs[0]
     ax.set_aspect('equal')
     m, o = mt['amplitude'].align(ot['amplitude'])
@@ -238,6 +263,7 @@ def tide_plots(model_tide, obs_tide, out_path, station_id):
     for x, y, label in zip(o, m, m.index):
         ax.text(x, y, label, size=15)
 
+    # Phase plot
     ax = axs[1]
     ax.set_aspect('equal')
     m, o = mt['phase'].align(ot['phase'])
@@ -251,6 +277,7 @@ def tide_plots(model_tide, obs_tide, out_path, station_id):
     for x, y, label in zip(o, m, m.index):
         ax.text(x, y, label, size=15)
 
+    # Phase hour plot
     ax = axs[2]
     ax.set_aspect('equal')
     m, o = mt['phase_hr'].align(ot['phase_hr'])
@@ -268,6 +295,13 @@ def tide_plots(model_tide, obs_tide, out_path, station_id):
 
 
 def tidal_error(model, obs, out_path):
+    """Compute and report error statistics
+
+    Args:
+        model (DataFrame): Tidal constitents for model
+        obs (DataFrame): Tidal constitents for observations
+        out_path (pathlib.Path): Output path
+    """
     model = model[model.constituent.isin(PLOT_CONSTITUENTS)]
     obs = obs[obs.constituent.isin(PLOT_CONSTITUENTS)]
     M = model.pivot(index='station', columns='constituent', values=['phase', 'amplitude'])
@@ -400,6 +434,7 @@ def open_csv(filename):
 
 
 def maxlim(model, obs):
+    # Compute max axis value for plots.
     maxav = 1.2 * max(model.max(), obs.max())
     axlim = max(round(maxav, 1), 0.1)
     return axlim
