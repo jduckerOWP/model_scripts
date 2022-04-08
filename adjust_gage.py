@@ -18,7 +18,9 @@ import concurrent.futures
 CORRECTIONS = None
 
 COL_MAP = {'streamflow (ft^3/s)': 'streamflow (m^3/s)',
-            'gage height (ft)': 'gage height (m)'}
+            'gage height (ft)': 'gage height (m)',
+            "Elevation ocean/est (ft NAVD88)": "Elevation ocean/est (m NAVD88)",
+            "Water Level (ft)": "Water Level (m)"}
             
 NAN_VALUES = [-999999]
 
@@ -85,6 +87,7 @@ def load_corrections(corrections):
 def adjust_station(path, out_path, only_write_adjusted=False):
     key = path.name.split('.', 1)[0]
     if key in CORRECTIONS.index:
+        print("Adjusting", path)
         adj = CORRECTIONS.loc[key, ['Datum correction (m)', 'Gage datum (m)']].sum()
     elif only_write_adjusted:
         return
@@ -94,11 +97,13 @@ def adjust_station(path, out_path, only_write_adjusted=False):
     data = pd.read_csv(path, low_memory=False)
     data = data.rename(columns=COL_MAP)
 
-    data['gage height (m)'] = ft_to_m(filter_special_values(data['gage height (m)']))
-    data['streamflow (m^3/s)'] = ft3_to_m3(filter_special_values(data['streamflow (m^3/s)']))
+    for c in COL_MAP.values():
+        if c in data:
+            data[c] = ft_to_m(filter_special_values(data[c]))
     print(" "*80, end="\r")
 
-    data['gage height (m)'] += adj
+    if 'gage height (m)' in data.columns:
+        data['gage height (m)'] += adj
         
     print(" ->", out_path)
     try:
@@ -115,7 +120,7 @@ def station_stats(path):
     
 def compute_stats(df):
     """Compute min, max, and median of corrected columns in df"""
-    return df[list(COL_MAP.values())].describe()
+    return df[df.columns.intersection(COL_MAP.values())].describe()
 
 
 def main(args):    
