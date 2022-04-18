@@ -1,4 +1,7 @@
-"""Adjust USGS gage readings
+"""
+Author: Ryan Grout
+
+Adjust USGS gage readings
 
 This script will:
 1. Convert from feet to meters
@@ -125,6 +128,10 @@ def compute_stats(df):
 
 def main(args):    
     load_corrections(args.corrections)
+
+    # create output_directory if it doesn't exist
+    args.output_dir.mkdir(parents=True)
+    
     #with concurrent.futures.ThreadPoolExecutor(initializer=load_corrections, initargs=(args.corrections,)) as executor:
     with concurrent.futures.ThreadPoolExecutor() as executor:
         fs = []
