@@ -31,11 +31,15 @@ import matplotlib.pyplot as plt
 import pathlib
 from dataclasses import dataclass
 from enum import Enum, auto
-
-from pytides.tide import Tide
-from pytides.astro import astro
-from pytides.constituent import noaa as noaa_constituents
 from scipy.stats import pearsonr
+
+try:
+    from pytides.tide import Tide
+    from pytides.astro import astro
+    from pytides.constituent import noaa as noaa_constituents
+    have_pytides = True
+except ImportError:
+    have_pytides = False
 
 # Turn off SettingWithCopyWarning (we are careful not to do that)
 pd.options.mode.chained_assignment = None
@@ -81,6 +85,7 @@ MINHOURS = {
 PLOT_CONSTITUENTS = ['M2', 'S2', 'N2', 'K2', 'O1', 'K1', 'Q1', 'P1']
 
 class Datum(Enum):
+    Unknown = auto()
     MSL = auto()
     NAVD88 = auto()
 
@@ -169,16 +174,6 @@ def phase_correct(pdiff):
     pdiff[pdiff < -180] = 360 + pdiff[pdiff < -180]
     return pdiff
 
-
-def get_options():
-    parser = argparse.ArgumentParser()
-    
-    parser.add_argument('dflow_history', type=pathlib.Path, help='DFlow history NetCDF')
-    parser.add_argument('obs_path', type=pathlib.Path, help="Path to observation files")
-    parser.add_argument('--output', default=pathlib.Path(), type=pathlib.Path, help="Output directory")
-    parser.add_argument('-t', '--tide', action='store_true', default=False, help='Solve tidal for tidal constituents')
-    parser.add_argument('-b', '--bias-correct', action='store_true', help="Bias correct all stations")
-    return parser.parse_args()
 
 def tidal_analysis(d):
     """Solve for tidal constituents.
@@ -387,33 +382,6 @@ def amplitude_plot(model, obs, out_path):
     plt.close(fig)
 
 
-def site_correspondence(station_names, station_files):
-    """Match station names to station data files
-
-    Args:
-        station_names (list): Station names from DFlow history
-        station_files (list): List of files to correspond
-
-    Returns:
-        dict: correspondence map
-    """
-    first_digits = re.compile(r'(\d+)_*(NAVD|MSL)?')
-    station_numbers = {}
-    for s in station_names:
-        s = s.decode()
-        if m := first_digits.search(s):
-            sid = int(m.group(1))
-            station_numbers[sid] = m.group(2)
-
-    rv = {}
-    for f in station_files:
-        if m := first_digits.search(f.stem):
-            mi = int(m.group(1))
-            if mi in station_numbers:
-                datum = station_numbers[mi]
-                rv[mi] = (f, datum)
-    return rv
-
 def open_nc(filename):
     with xr.open_dataset(filename, decode_cf=True, use_cftime=True) as DS:
         #DS = DS.resample(time='6min').nearest()
@@ -422,15 +390,48 @@ def open_nc(filename):
             obs = obs.drop_vars(['altitude', 'latitude', 'longitude'])
             obsdf = obs.to_dataframe()
             obsdf.index = DS.indexes['time'].to_datetimeindex()
-            return obsdf
+            return obsdf.rename(columns={"water_surface_height_above_reference_datum": "observation"})
         except KeyError:
             return pd.DataFrame()
         
 
 def open_csv(filename):
-    obs_ds = pd.read_csv(filename, infer_datetime_format=True, parse_dates=True, index_col=0)
-    obs = obs_ds[" Prediction"]
-    return obs
+    obs_ds = pd.read_csv(filename, low_memory=False)
+    # Remove possible spaces in column names
+    obs_ds.columns = obs_ds.columns.str.strip()
+
+    if 'gage height (m)' in obs_ds.columns:
+        return usgs_csv(obs_ds)
+    elif 'Water Level' in obs_ds.columns:
+        return coops_csv(obs_ds)
+    elif 'Water level (m NAVD88)' in obs_ds.columns:
+        return fev_csv(obs_ds)
+    else:
+        raise RuntimeError("Unknown CSV format")
+
+    
+def usgs_csv(df):
+    df['Date (utc)'] = pd.to_datetime(df['Date (utc)'], infer_datetime_format=True)
+    df = df.set_index("Date (utc)").sort_index()
+    if not df.index.tz:
+        df.index = df.index.tz_localize("UTC")
+    return df['gage height (m)'].rename("observation")
+
+
+def coops_csv(df):
+    df["Date Time"] = pd.to_datetime(df["Date Time"], infer_datetime_format=True)
+    df = df.set_index("Date Time").sort_index()
+    if not df.index.tz:
+        df.index = df.index.tz_localize("UTC")
+    return df["Water Level"].rename("observation")
+
+
+def fev_csv(df):
+    df["Date and Time (GMT)"] = pd.to_datetime(df["Date and Time (GMT)"], infer_datetime_format=True)
+    df = df.set_index("Date and Time (GMT)").sort_index()
+    if not df.index.tz:
+        df.index = df.index.tz_localize("UTC")
+    return df["Water level (m NAVD88)"].rename("observation")
 
 
 def maxlim(model, obs):
@@ -440,61 +441,69 @@ def maxlim(model, obs):
     return axlim
 
     
-def create_ts_dataframe(history_files, observation_path, out_path, tide=True, bias_correct=False):
+def create_ts_dataframe(history_files, observation_root, observation_path, out_path, tide=True, bias_correct=False):
     twelve = datetime.timedelta(hours=12)
     summary = []
     tidal_summary = []
+
+    correspond = pd.read_csv(observation_path, index_col='GageID', 
+                            usecols=['GageID', 'ProcessedCSVLoc'], 
+                            converters={'ProcessedCSVLoc': pathlib.Path})
+    if not correspond.index.is_unique:
+        print(correspond.index[correspond.index.duplicated()])
+        raise RuntimeError("GageID needs to be unique")
+
+    out_path.mkdir(parents=True, exist_ok=True)
+
     for hs in history_files:
+        print("Reading history file:", hs)
         with xr.open_dataset(hs) as DS:
-            station_map = site_correspondence(DS.station_name.values.tolist(), list(observation_path.iterdir()))
-            
-            lut = dict(zip(DS.station_name.values, DS.stations.values))
-            for col, (fn, datum) in station_map.items():
-                if datum is None:
-                    sn = bytes(str(col), encoding='ascii')
-                else:
-                    sn = bytes(f'{col}_{datum}', encoding='ascii')
+            for i, station in enumerate(DS.station_name.values):
+                sn = station.decode()
+                if sn not in correspond.index:
+                    continue
+                
+                fn = pathlib.Path(correspond.loc[sn, "ProcessedCSVLoc"])
+                if not fn.name:
+                    continue
+                path = observation_root / fn
+                if not path.exists():
+                    print("Skipping", path)
+                    continue
+    
 
-                # Get waterlevel for the station from dflow
-                try:
-                    ds_key = lut[sn]
-                except KeyError:
-                    ds_key = lut[bytes(f"USGS_FEV_{sn.decode()}", 'ascii')]
-
-                model = DS.loc[{'stations': ds_key}]['waterlevel']
+                model = DS.loc[{'stations': i}]['waterlevel']
                 if np.isnan(model.values).all():
                     continue
                 model = model.drop_vars(['station_x_coordinate', 'station_y_coordinate', 'station_name'])
-                model = model.to_dataframe()
+                model = model.to_dataframe().rename(columns={"waterlevel": "model"})
 
                 T = model.index[model.index >= model.index[0]+twelve]
                 # drop first twelve hours of model to remove warmup effects
                 model = model.loc[T]
+                model.index = model.index.tz_localize('UTC')
 
                 # Get the observation data and resample to to 5min
-                if fn.suffix == ".nc":
-                    obs = open_nc(fn)
-                elif fn.suffix == ".csv":
-                    obs = open_csv(fn)
-                else:
-                    print("Unrecognized suffix", fn.suffix)
-                    continue
+                obs = open_csv(path)
                 
                 # At times obs is malformed csv, so we check if len == 1.
                 if obs.empty or len(obs) == 1 or model.empty:
                     continue
-                sn = sn.decode()
                 
-                model = model.asfreq('1H')
-                obs = obs.asfreq('1H')
+                try:
+                    model = model.resample('1H', origin='start').interpolate(method='time')
+                    obs = obs.resample('1H', origin=model.index[0]).interpolate(method='time')
+                except:
+                    breakpoint()
+                # Drop leading/trailing nans from obs
+                model = model.loc[model.first_valid_index():model.last_valid_index()]
+                obs = obs.loc[obs.first_valid_index():obs.last_valid_index()]
                 joined = model.join(obs, how='inner').sort_index()
-                joined = joined.rename(columns={'waterlevel': 'model', "water_surface_height_above_reference_datum": "observation", " Prediction": "observation", " Water Level": "observation"})
-                if joined.empty:
+                if joined.empty or pd.isnull(joined).any().any():
                     print("Joined dataframe is empty")
-                    continue
+                    continue                
                 
-                BC = bias_correct or (datum == "MSL")
-                d = TSData(datum, str(col), joined, bias_correct=BC)
+                d = TSData("", sn, joined, bias_correct=bias_correct)
 
                 print("writing and plotting", d.station_id)
                 d.data.to_csv(out_path/f'{d.station_id}.csv')
@@ -530,19 +539,39 @@ def create_ts_dataframe(history_files, observation_path, out_path, tide=True, bi
     #Filter summary and tidal_summary (if necessary) by skill
     summary_df = pd.DataFrame(summary, columns=['station_id', 'bias', 'corr', 'rmse', 'nrmse', 'skill'])
     summary_df["idx"] = list(range(len(summary)))
-    summary_df = summary_df.groupby('station_id').apply(lambda x: x.iloc[x.skill.argmax()])
+    #summary_df = summary_df.groupby('station_id').apply(lambda x: x.iloc[x.skill.argmax()])
     sel_idx = set(summary_df["idx"])
     summary_df.drop(columns=["idx"]).to_csv(out_path/"summary.csv", index=False)
 
-    model_df = pd.concat([x[0] for x in map(tidal_summary.__getitem__, sel_idx)]).reset_index()
-    obs_df = pd.concat([x[1] for x in map(tidal_summary.__getitem__, sel_idx)]).reset_index()
+    if tide:
+        model_df = pd.concat([x[0] for x in map(tidal_summary.__getitem__, sel_idx)]).reset_index()
+        obs_df = pd.concat([x[1] for x in map(tidal_summary.__getitem__, sel_idx)]).reset_index()
 
-    amplitude_plot(model_df, obs_df, out_path)
-    tidal_error(model_df, obs_df, out_path)
+        amplitude_plot(model_df, obs_df, out_path)
+        tidal_error(model_df, obs_df, out_path)
+
+
+def get_options():
+    parser = argparse.ArgumentParser()
+    
+    parser.add_argument('dflow_history', type=pathlib.Path, help='DFlow history NetCDF')
+    parser.add_argument('obs_root', type=pathlib.Path, help="Root path for observations")
+    parser.add_argument('obs_path', type=pathlib.Path, help="Path to observation file")
+    parser.add_argument('--output', default=pathlib.Path(), type=pathlib.Path, help="Output directory")
+    parser.add_argument('-t', '--tide', action='store_true', default=False, help='Solve tidal for tidal constituents')
+    parser.add_argument('-b', '--bias-correct', action='store_true', help="Bias correct all stations")
+    args = parser.parse_args()
+
+    if args.dflow_history.is_dir():
+        args.dflow_history = list(args.dflow_history.glob("*.nc"))
+    else:
+        args.dflow_history = [args.dflow_history]
+    return args
+
 
 if __name__ == "__main__":
     args = get_options()
-    create_ts_dataframe(args.dflow_history.glob("*.nc"), args.obs_path, args.output, 
+    create_ts_dataframe(args.dflow_history, args.obs_root, args.obs_path, args.output, 
                     tide=args.tide, bias_correct=args.bias_correct)
                 
             
