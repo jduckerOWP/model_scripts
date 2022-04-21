@@ -23,6 +23,7 @@ import xarray as xr
 import pandas as pd
 import numpy as np
 import re
+import sys
 import time
 import math
 import argparse
@@ -570,6 +571,9 @@ def get_options():
         args.dflow_history = list(args.dflow_history.glob("*.nc"))
     else:
         args.dflow_history = [args.dflow_history]
+
+    if not have_pytides and args.tide:
+        raise RuntimeError("PyTides needs to be installed for tidal constituent solving")
     return args
 
 
