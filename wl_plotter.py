@@ -401,11 +401,15 @@ def open_csv(filename):
     obs_ds.columns = obs_ds.columns.str.strip()
 
     if 'gage height (m)' in obs_ds.columns:
-        return usgs_csv(obs_ds)
+        data = usgs_csv(obs_ds)
+        if "NAVD88" in filename.name:
+            return data, "NAVD88"
+        else:
+            return data, ""
     elif 'Water Level' in obs_ds.columns:
-        return coops_csv(obs_ds)
+        return coops_csv(obs_ds), ""
     elif 'Water level (m NAVD88)' in obs_ds.columns:
-        return fev_csv(obs_ds)
+        return fev_csv(obs_ds), "NAVD88"
     else:
         raise RuntimeError("Unknown CSV format")
 
@@ -484,7 +488,7 @@ def create_ts_dataframe(history_files, observation_root, observation_path, out_p
                 model.index = model.index.tz_localize('UTC')
 
                 # Get the observation data and resample to to 5min
-                obs = open_csv(path)
+                obs, datum = open_csv(path)
                 
                 # At times obs is malformed csv, so we check if len == 1.
                 if obs.empty or len(obs) == 1 or model.empty:
@@ -503,7 +507,7 @@ def create_ts_dataframe(history_files, observation_root, observation_path, out_p
                     print("Joined dataframe is empty")
                     continue                
                 
-                d = TSData("", sn, joined, bias_correct=bias_correct)
+                d = TSData(datum, sn, joined, bias_correct=bias_correct)
 
                 print("writing and plotting", d.station_id)
                 d.data.to_csv(out_path/f'{d.station_id}.csv')
