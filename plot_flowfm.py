@@ -66,12 +66,22 @@ def plot_models(output_dir, models, obs=None):
     ax = plt.gca()
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d'))
 
-    for f, d in models.items():
-        ax.plot_date(d.time.values, d.values, label=f.parent.parent.name)
+    # Find smallest timespan and clip all datasets to that period
+    start = max(pd.Timestamp(d.time.values[0]).tz_localize('UTC') for d in models.values())
+    end = min(pd.Timestamp(d.time.values[-1]).tz_localize('UTC') for d in models.values())
+    if obs is not None:
+        start = max(start, obs.index[0])
+        end = min(end, obs.index[-1])    
 
-    if obs:
-        ax.plot_date(obs.index.to_pydatetime(), obs.values, label="Measurement")
+    if obs is not None:
+        obs = obs.loc[start:end]
+        ax.plot(obs.index.to_pydatetime(), obs.values, 'r', label="Measurement")
     
+    colors = iter(MODEL_COLORS.values())
+    for f, d in models.items():
+        d = d.sel({'time': slice(start.tz_localize(None), end.tz_localize(None))})
+        ax.plot(d.time.values, d.values, color=next(colors), linestyle='--', label=f.parent.parent.name)
+
     ax.legend(loc='upper left')
     ax.grid()
     ax.set_title(station, size=20)
