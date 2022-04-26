@@ -2,9 +2,16 @@ import argparse
 import pathlib
 import xarray as xr
 import pandas as pd
+
+import matplotlib
+matplotlib.use('agg')
 from matplotlib import pyplot as plt
 import matplotlib.dates as mdates
+import matplotlib.colors as mcolors
 
+MODEL_COLORS = mcolors.BASE_COLORS.copy()
+del MODEL_COLORS['w']
+del MODEL_COLORS['r']
 
 def open_csv(filename):
     obs_ds = pd.read_csv(filename, low_memory=False)
@@ -81,8 +88,8 @@ def main(args):
         hfile = d / "FlowFM_0000_his.nc"
         if hfile.exists():
             history_files[hfile] = fh = xr.open_dataset(hfile)
-            _stations = list(map(bytes.decode, fh.station_name.values))
-            if stations:
+            _stations = fh.station_name.values
+            if stations is not None:
                 if (_stations != stations).any():
                     raise RuntimeError(f"Stations differ in {hfile}")
             else:
@@ -97,10 +104,13 @@ def main(args):
             print(correspond.index[correspond.index.duplicated()])
             raise RuntimeError("GageID needs to be unique")
 
-    for i, station in enumerate(stations):
-        if args.correspond:
-            obspath = correspond.loc[station]
-            obsdata = open_csv(obspath)
+    for i, station in enumerate(map(bytes.decode, stations)):
+        if args.correspond and station in correspond.index:
+            obspath = correspond.loc[station, "ProcessedCSVLoc"]
+            try:
+                obsdata = open_csv(args.obs.joinpath(obspath))[0]
+            except FileNotFoundError:
+                obsdata = None
         else:
             obsdata = None
 
