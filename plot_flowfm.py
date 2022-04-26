@@ -82,6 +82,9 @@ def plot_models(output_dir, models, obs=None):
 
 
 def main(args):
+    if args.mplstyle:
+        plt.style.use(args.mplstyle)
+
     history_files = {}
     stations = None
     for d in args.model:
@@ -114,6 +117,7 @@ def main(args):
         else:
             obsdata = None
 
+        print("Plotting", station)
         model_data = {f: d.waterlevel[:, i] for f,d in history_files.items()}
         plot_models(args.output, model_data, obs=obsdata)
 
@@ -125,6 +129,7 @@ def get_options():
     parser.add_argument("--obs", type=pathlib.Path, help="data folder")
     parser.add_argument("--correspond", type=pathlib.Path, help='Data correspondence table')
     parser.add_argument("model", nargs='+', type=pathlib.Path, help="model folders")
+    parser.add_argument("--mplstyle", help="Matplotlib style for plots")
     args = parser.parse_args()
 
     if args.obs and not args.correspond:
