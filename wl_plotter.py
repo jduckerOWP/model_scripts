@@ -495,11 +495,9 @@ def create_ts_dataframe(history_files, observation_root, observation_path, out_p
                 if obs.empty or len(obs) == 1 or model.empty:
                     continue
                 
-                try:
-                    # Resample obs timestep of model
-                    obs = obs.resample(model.index[1] - model.index[0], origin=model.index[0]).max()
-                except:
-                    breakpoint()
+                # Resample obs timestep of model
+                obs = obs.resample(model.index[1] - model.index[0], origin=model.index[0]).max()
+                
                 # Drop leading/trailing nans from obs
                 model = model.loc[model.first_valid_index():model.last_valid_index()]
                 obs = obs.loc[obs.first_valid_index():obs.last_valid_index()]
