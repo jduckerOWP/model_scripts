@@ -502,7 +502,7 @@ def create_ts_dataframe(history_files, observation_root, observation_path, out_p
                 model = model.loc[model.first_valid_index():model.last_valid_index()]
                 obs = obs.loc[obs.first_valid_index():obs.last_valid_index()]
                 joined = model.join(obs, how='inner').sort_index()
-                if joined.empty or pd.isnull(joined).any().any():
+                if joined.empty or pd.isnull(joined).all().any():
                     print("Joined dataframe is empty")
                     continue                
                 
