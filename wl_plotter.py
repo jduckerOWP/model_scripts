@@ -496,8 +496,8 @@ def create_ts_dataframe(history_files, observation_root, observation_path, out_p
                     continue
                 
                 try:
-                    model = model.resample('1H', origin='start').interpolate(method='time')
-                    obs = obs.resample('1H', origin=model.index[0]).interpolate(method='time')
+                    # Resample obs timestep of model
+                    obs = obs.resample(model.index[1] - model.index[0], origin=model.index[0]).max()
                 except:
                     breakpoint()
                 # Drop leading/trailing nans from obs
