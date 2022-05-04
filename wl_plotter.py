@@ -472,7 +472,7 @@ def create_ts_dataframe(history_files, observation_root, observation_path, out_p
                 if not fn.name:
                     continue
                 path = observation_root / fn
-                if not path.exists():
+                if not path.is_file():
                     print("Skipping", path)
                     continue
     
