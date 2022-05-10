@@ -408,7 +408,11 @@ def open_csv(filename):
         else:
             return data, ""
     elif 'Water Level' in obs_ds.columns:
-        return coops_csv(obs_ds), ""
+        data = coops_csv(obs_ds)
+        if "NAVD88" in filename.name:
+            return data, "NAVD88"
+        elif "MSL" in filename.name:
+            return data, "MSL"
     elif 'Water level (m NAVD88)' in obs_ds.columns:
         return fev_csv(obs_ds), "NAVD88"
     else:
@@ -495,9 +499,11 @@ def create_ts_dataframe(history_files, observation_root, observation_path, out_p
                 if obs.empty or len(obs) == 1 or model.empty:
                     continue
                 
-                # Resample obs timestep of model
-                obs = obs.resample(model.index[1] - model.index[0], origin=model.index[0]).max()
-                
+                # Resample model to frequency of obs
+                freq = obs.index[1] - obs.index[0]
+                model = model.resample(freq, origin=obs.index[0]).interpolate(method='linear')
+                obs = obs.asfreq(freq)  # Ensure that obs is regular
+
                 # Drop leading/trailing nans from obs
                 model = model.loc[model.first_valid_index():model.last_valid_index()]
                 obs = obs.loc[obs.first_valid_index():obs.last_valid_index()]
