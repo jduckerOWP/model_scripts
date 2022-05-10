@@ -505,10 +505,8 @@ def create_ts_dataframe(history_files, observation_root, observation_path, out_p
                 obs = obs.asfreq(freq)  # Ensure that obs is regular
 
                 # Drop leading/trailing nans from obs
-                model = model.loc[model.first_valid_index():model.last_valid_index()]
-                obs = obs.loc[obs.first_valid_index():obs.last_valid_index()]
-                joined = model.join(obs, how='inner').sort_index()
-                if joined.empty or pd.isnull(joined).all().any():
+                joined = model.join(obs, how='inner').sort_index().dropna()
+                if joined.empty:
                     print("Joined dataframe is empty")
                     continue                
                 
