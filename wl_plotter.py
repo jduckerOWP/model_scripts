@@ -403,18 +403,20 @@ def open_csv(filename):
 
     if 'gage height (m)' in obs_ds.columns:
         data = usgs_csv(obs_ds)
+        obstype = "usgs"
         if "NAVD88" in filename.name:
-            return data, "NAVD88"
+            return data, "NAVD88", obstype
         else:
-            return data, ""
+            return data, "", obstype
     elif 'Water Level' in obs_ds.columns:
         data = coops_csv(obs_ds)
+        obstype = "coops"
         if "NAVD88" in filename.name:
-            return data, "NAVD88"
+            return data, "NAVD88", obstype
         elif "MSL" in filename.name:
-            return data, "MSL"
+            return data, "MSL", obstype
     elif 'Water level (m NAVD88)' in obs_ds.columns:
-        return fev_csv(obs_ds), "NAVD88"
+        return fev_csv(obs_ds), "NAVD88", "fev"
     else:
         raise RuntimeError("Unknown CSV format")
 
@@ -491,24 +493,27 @@ def create_ts_dataframe(history_files, observation_root, observation_path, out_p
                 # drop first twelve hours of model to remove warmup effects
                 model = model.loc[T]
                 model.index = model.index.tz_localize('UTC')
+                modelfreq = model.index[1] - model.index[0]
 
-                # Get the observation data and resample to to 5min
-                obs, datum = open_csv(path)
+                # Get the observation data
+                obs, datum, obstype = open_csv(path)
+
+                # Restrict observation range to model range
+                obs = obs.loc[model.index[0]:model.index[-1]+modelfreq]
+                obsfreq = obs.index[1] - obs.index[0]
                 
                 # At times obs is malformed csv, so we check if len == 1.
                 if obs.empty or len(obs) == 1 or model.empty:
                     continue
                 
                 # Resample model to frequency of obs
-                obsfreq = obs.index[1] - obs.index[0]
-                modelfreq = model.index[1] - model.index[0]
-                if modelfreq < obsfreq:
-                    # Downsample model
-                    model = model.resample(obsfreq, origin=obs.index[0]).median()
+                if obstype == "fev":
+                    # Downsample observations to match model, but do not interpolate
+                    obs = obs.resample(modelfreq, origin=model.index[0]).asfreq()
                 else:
-                    # Upsample and interpolate model
+                    # Resample and interpolate model
                     model = model.resample(obsfreq, origin=obs.index[0]).interpolate(method='linear')
-                obs = obs.asfreq(obsfreq)  # Ensure that obs is regular
+                    obs = obs.asfreq(obsfreq)  # Ensure that obs is regular
 
                 # Drop leading/trailing nans from obs
                 joined = model.join(obs, how='inner').sort_index().dropna()
