@@ -530,20 +530,24 @@ def create_ts_dataframe(history_files, observation_root, observation_path, out_p
 
                 ax.plot_date(d.data.index, d.observed, 'r', marker=',', linestyle='-', label=d.observed.name)
                 ax.plot_date(d.data.index, d.predicted, 'b', marker=',', linestyle='-', label=d.predicted.name)
-                ax.legend(loc='upper right')
+                
                 ax.grid()
-                ax.set_title(f"{d.station_id} (Datum: {d.datum})", size=20)
+                ax.set_title(f"Station ID: {d.station_id}", size=20)
 
-                ax.set_ylabel("water level [m]")
-                ax.set_xlabel("Date")
+                if d.datum:
+                    ax.set_ylabel(f"Water level (m {d.datum})")
+                else:
+                    ax.set_ylabel("Water level (m)")
+
+                ax.set_xlabel(f"Date [{d.data.index[0].year}]")
                 measures = (d.bias(), d.corr()[0], d.rmse(), d.nrmse(), d.skill())
                 summary.append((d.station_id,) + measures)
                 # add timeseries statistics
-                ax.annotate(f"Bias {round(measures[0], 3)}", xy=(0.85, 0.15), xycoords="axes fraction", fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
-                ax.annotate(f"Corr {round(measures[1], 3)}", xy=(0.85, 0.12), xycoords="axes fraction", fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
-                ax.annotate(f"RMSE {round(measures[2], 3)}", xy=(0.85, 0.09), xycoords="axes fraction", fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
-                ax.annotate(f"NRMSE {round(measures[3], 3)}", xy=(0.85, 0.06), xycoords="axes fraction", fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
-                ax.annotate(f"Skill {round(measures[4], 3)}", xy=(0.85, 0.03), xycoords="axes fraction", fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
+                ax.annotate(f"Bias {round(measures[0], 3)}", xy=(0.825, 0.15), xycoords="axes fraction", fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
+                ax.annotate(f"Corr {round(measures[1], 3)}", xy=(0.825, 0.12), xycoords="axes fraction", fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
+                ax.annotate(f"RMSE {round(measures[2], 3)}", xy=(0.825, 0.09), xycoords="axes fraction", fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
+                ax.annotate(f"NRMSE {round(measures[3], 3)}", xy=(0.825, 0.06), xycoords="axes fraction", fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
+                ax.annotate(f"Skill {round(measures[4], 3)}", xy=(0.825, 0.03), xycoords="axes fraction", fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
                 plt.savefig(out_path/f"{d.station_id}.png", bbox_inches='tight', dpi=300)
                 plt.close(fig)
 
