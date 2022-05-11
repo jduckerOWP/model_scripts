@@ -1,0 +1,12 @@
+name: model_scripts
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python>=3.8
+  - numpy>=1.22
+  - xarray>=0.17
+  - pandas>=1.4
+  - scipy>=1.6
+  - matplotlib>=3.3
+
