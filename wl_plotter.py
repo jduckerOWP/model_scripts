@@ -27,6 +27,7 @@ import math
 import argparse
 import datetime
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 import pathlib
 from dataclasses import dataclass
 from enum import Enum, auto
@@ -509,14 +510,15 @@ def create_ts_dataframe(history_files, observation_root, observation_path, out_p
                 # Resample model to frequency of obs
                 if obstype == "fev":
                     # Downsample observations to match model, but do not interpolate
-                    obs = obs.resample(modelfreq, origin=model.index[0]).asfreq()
+                    obs_data = obs.resample(modelfreq, origin=model.index[0]).asfreq()
+                    model_data = model
                 else:
                     # Resample and interpolate model
-                    model = model.resample(obsfreq, origin=obs.index[0]).interpolate(method='linear')
-                    obs = obs.asfreq(obsfreq)  # Ensure that obs is regular
+                    model_data = model.resample(obsfreq, origin=obs.index[0]).interpolate(method='linear')
+                    obs_data = obs.asfreq(obsfreq)  # Ensure that obs is regular
 
                 # Drop leading/trailing nans from obs
-                joined = model.join(obs, how='inner').sort_index().dropna()
+                joined = model_data.join(obs_data, how='inner').sort_index().dropna()
                 if joined.empty:
                     print("Joined dataframe is empty")
                     continue                
@@ -525,29 +527,30 @@ def create_ts_dataframe(history_files, observation_root, observation_path, out_p
 
                 print("writing and plotting", d.station_id)
                 d.data.to_csv(out_path/f'{d.station_id}.csv')
-                fig = plt.figure(figsize=(12, 6))
+                fig = plt.figure(figsize=(10, 5))
                 ax = plt.gca()
+                ax.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d'))
 
-                ax.plot_date(d.data.index, d.observed, 'r', marker=',', linestyle='-', label=d.observed.name)
-                ax.plot_date(d.data.index, d.predicted, 'b', marker=',', linestyle='-', label=d.predicted.name)
+                ax.plot(model_data, 'b', marker=',', linestyle='-', label="Model")
+                ax.plot(obs_data, 'r', marker=',', linestyle='-', label="Measured")
                 
                 ax.grid()
-                ax.set_title(f"Station ID: {d.station_id}", size=20)
+                ax.set_title(f"Station ID: {d.station_id}", size=20, fontweight='bold')
 
                 if d.datum:
-                    ax.set_ylabel(f"Water level (m {d.datum})")
+                    ax.set_ylabel(f"Water level (m {d.datum})", size=15)
                 else:
-                    ax.set_ylabel("Water level (m)")
+                    ax.set_ylabel("Water level (m)", size=15)
 
-                ax.set_xlabel(f"Date [{d.data.index[0].year}]")
+                ax.set_xlabel(f"Date [{d.data.index[0].year}]", size=15)
                 measures = (d.bias(), d.corr()[0], d.rmse(), d.nrmse(), d.skill())
                 summary.append((d.station_id,) + measures)
                 # add timeseries statistics
-                ax.annotate(f"Bias {round(measures[0], 3)}", xy=(0.825, 0.15), xycoords="axes fraction", fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
-                ax.annotate(f"Corr {round(measures[1], 3)}", xy=(0.825, 0.12), xycoords="axes fraction", fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
-                ax.annotate(f"RMSE {round(measures[2], 3)}", xy=(0.825, 0.09), xycoords="axes fraction", fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
+                ax.annotate(f"Bias {round(measures[0], 3)}", xy=(0.825, 0.18), xycoords="axes fraction", fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
+                ax.annotate(f"Corr {round(measures[1], 3)}", xy=(0.825, 0.14), xycoords="axes fraction", fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
+                ax.annotate(f"RMSE {round(measures[2], 3)}", xy=(0.825, 0.10), xycoords="axes fraction", fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
                 ax.annotate(f"NRMSE {round(measures[3], 3)}", xy=(0.825, 0.06), xycoords="axes fraction", fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
-                ax.annotate(f"Skill {round(measures[4], 3)}", xy=(0.825, 0.03), xycoords="axes fraction", fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
+                ax.annotate(f"Skill {round(measures[4], 3)}", xy=(0.825, 0.02), xycoords="axes fraction", fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
                 plt.savefig(out_path/f"{d.station_id}.png", bbox_inches='tight', dpi=300)
                 plt.close(fig)
 
