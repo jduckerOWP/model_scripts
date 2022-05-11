@@ -531,8 +531,8 @@ def create_ts_dataframe(history_files, observation_root, observation_path, out_p
                 ax = plt.gca()
                 ax.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d'))
 
-                ax.plot(model_data, 'b', marker=',', linestyle='-', label="Model")
                 ax.plot(obs_data, 'r', marker=',', linestyle='-', label="Measured")
+                ax.plot(model_data, 'b', marker=',', linestyle='-', label="Model")
                 ax.legend()
                 ax.grid()
                 ax.set_title(f"Station ID: {d.station_id}", size=20, fontweight='bold')
