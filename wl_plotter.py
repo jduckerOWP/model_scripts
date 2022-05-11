@@ -502,11 +502,11 @@ def create_ts_dataframe(history_files, observation_root, observation_path, out_p
 
                 # Restrict observation range to model range
                 obs = obs.loc[model.index[0]:model.index[-1]+modelfreq]
-                obsfreq = obs.index[1] - obs.index[0]
                 
                 # At times obs is malformed csv, so we check if len == 1.
                 if obs.empty or len(obs) == 1 or model.empty:
                     continue
+                obsfreq = obs.index[1] - obs.index[0]
                 
                 # Resample model to frequency of obs
                 if obstype == "fev":
