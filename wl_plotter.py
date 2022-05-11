@@ -500,9 +500,15 @@ def create_ts_dataframe(history_files, observation_root, observation_path, out_p
                     continue
                 
                 # Resample model to frequency of obs
-                freq = obs.index[1] - obs.index[0]
-                model = model.resample(freq, origin=obs.index[0]).interpolate(method='linear')
-                obs = obs.asfreq(freq)  # Ensure that obs is regular
+                obsfreq = obs.index[1] - obs.index[0]
+                modelfreq = model.index[1] - model.index[0]
+                if modelfreq < obsfreq:
+                    # Downsample model
+                    model = model.resample(obsfreq, origin=obs.index[0]).median()
+                else:
+                    # Upsample and interpolate model
+                    model = model.resample(obsfreq, origin=obs.index[0]).interpolate(method='linear')
+                obs = obs.asfreq(obsfreq)  # Ensure that obs is regular
 
                 # Drop leading/trailing nans from obs
                 joined = model.join(obs, how='inner').sort_index().dropna()
