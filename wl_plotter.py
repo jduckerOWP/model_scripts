@@ -415,10 +415,12 @@ def open_csv(filename):
             return data, "NAVD88", obstype
         elif "MSL" in filename.name:
             return data, "MSL", obstype
+        else:
+            return data, "", obstype
     elif 'Water level (m NAVD88)' in obs_ds.columns:
         return fev_csv(obs_ds), "NAVD88", "fev"
-    else:
-        raise RuntimeError("Unknown CSV format")
+    
+    raise RuntimeError("Unknown CSV format")
 
     
 def usgs_csv(df):
