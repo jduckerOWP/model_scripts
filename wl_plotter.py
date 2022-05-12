@@ -546,11 +546,17 @@ def create_ts_dataframe(history_files, observation_root, observation_path, out_p
                 measures = (d.bias(), d.corr()[0], d.rmse(), d.nrmse(), d.skill())
                 summary.append((d.station_id,) + measures)
                 # add timeseries statistics
-                ax.annotate(f"Bias {round(measures[0], 3)}", xy=(0.825, 0.18), xycoords="axes fraction", fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
-                ax.annotate(f"Corr {round(measures[1], 3)}", xy=(0.825, 0.14), xycoords="axes fraction", fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
-                ax.annotate(f"RMSE {round(measures[2], 3)}", xy=(0.825, 0.10), xycoords="axes fraction", fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
-                ax.annotate(f"NRMSE {round(measures[3], 3)}", xy=(0.825, 0.06), xycoords="axes fraction", fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
-                ax.annotate(f"Skill {round(measures[4], 3)}", xy=(0.825, 0.02), xycoords="axes fraction", fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
+                measures = tuple(round(x, 3) for x in measures)
+                stat_str = f"Bias: {measures[0]}\nCorr: {measures[1]}\nRMSE: {measures[2]}\nNRMSE: {measures[3]}\nSkill: {measures[4]}"
+                ax.annotate(stat_str, xy=(0.825, 0.06), 
+                        fontsize=8,
+                        xycoords="axes fraction",
+                        bbox={'boxstyle': 'square', 'facecolor': 'white', 'alpha': 0.75})
+                #ax.annotate(f"Bias {round(measures[0], 3)}", xy=(0.825, 0.18), xycoords="axes fraction", fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
+                #ax.annotate(f"Corr {round(measures[1], 3)}", xy=(0.825, 0.14), xycoords="axes fraction", fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
+                #ax.annotate(f"RMSE {round(measures[2], 3)}", xy=(0.825, 0.10), xycoords="axes fraction", fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
+                #ax.annotate(f"NRMSE {round(measures[3], 3)}", xy=(0.825, 0.06), xycoords="axes fraction", fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
+                #ax.annotate(f"Skill {round(measures[4], 3)}", xy=(0.825, 0.02), xycoords="axes fraction", fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
                 plt.savefig(out_path/f"{d.station_id}.png", bbox_inches='tight', dpi=300)
                 plt.close(fig)
 
@@ -581,7 +587,7 @@ def get_options():
     
     parser.add_argument('dflow_history', type=pathlib.Path, help='DFlow history NetCDF')
     parser.add_argument('obs_root', type=pathlib.Path, help="Root path for observations")
-    parser.add_argument('obs_path', type=pathlib.Path, help="Path to observation file")
+    parser.add_argument('obs_path', type=pathlib.Path, help="Path to observation correspondence file")
     parser.add_argument('--output', default=pathlib.Path(), type=pathlib.Path, help="Output directory")
     parser.add_argument('-t', '--tide', action='store_true', default=False, help='Solve tidal for tidal constituents')
     parser.add_argument('-b', '--bias-correct', action='store_true', help="Bias correct all stations")
