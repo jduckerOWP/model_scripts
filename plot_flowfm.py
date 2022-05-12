@@ -90,7 +90,7 @@ def plot_models(output_dir, models, obs=None):
             label = f"Model ({f.parent.parent.name})"
         ax.plot(d.time.values, d.values, color=next(colors), linestyle='--', label=label, linewidth=2)
 
-    ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
+    ax.legend()
     ax.grid()
     ax.set_title(f"Station ID: {station}", size=20, fontweight='bold')
     ax.set_xlabel(f"Date [{year}]", size=15)
