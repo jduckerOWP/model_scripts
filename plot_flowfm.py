@@ -115,6 +115,8 @@ def main(args):
                     raise RuntimeError(f"Stations differ in {hfile}")
             else:
                 stations = _stations
+        else:
+            raise FileNotFoundError(f"Cannot find {hfile}")
 
     # load the correspondence table
     if args.correspond:
