@@ -76,7 +76,7 @@ def plot_models(output_dir, models, obs=None):
     if obs is not None:
         obs = obs.loc[start:end]
         if pd.notna(obs.values).any():
-            ax.plot(obs.index.to_pydatetime(), obs.values, 'r', label="Measurement")
+            ax.plot(obs.index.to_pydatetime(), obs.values, 'r', label="Measurement", linewidth=2)
     
     colors = iter(MODEL_COLORS.values())
     for f, d in models.items():
@@ -87,12 +87,12 @@ def plot_models(output_dir, models, obs=None):
         if len(models) == 1:
             label = "Model"
         else:
-            label = f"Model [{f.parent.parent.name}]"
-        ax.plot(d.time.values, d.values, color=next(colors), linestyle='--', label=label)
+            label = f"Model ({f.parent.parent.name})"
+        ax.plot(d.time.values, d.values, color=next(colors), linestyle='--', label=label, linewidth=2)
 
     ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
     ax.grid()
-    ax.set_title(f"Station ID: {station}", size=20)
+    ax.set_title(f"Station ID: {station}", size=20, fontweight='bold')
     ax.set_xlabel(f"Date [{year}]", size=15)
     ax.set_ylabel("Water level (m)", size=15)
     plt.savefig(output_dir/f"{station}.png", bbox_inches='tight', dpi=300)
