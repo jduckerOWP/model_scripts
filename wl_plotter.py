@@ -552,11 +552,6 @@ def create_ts_dataframe(history_files, observation_root, observation_path, out_p
                         fontsize=8,
                         xycoords="axes fraction",
                         bbox={'boxstyle': 'square', 'facecolor': 'white', 'alpha': 0.75})
-                #ax.annotate(f"Bias {round(measures[0], 3)}", xy=(0.825, 0.18), xycoords="axes fraction", fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
-                #ax.annotate(f"Corr {round(measures[1], 3)}", xy=(0.825, 0.14), xycoords="axes fraction", fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
-                #ax.annotate(f"RMSE {round(measures[2], 3)}", xy=(0.825, 0.10), xycoords="axes fraction", fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
-                #ax.annotate(f"NRMSE {round(measures[3], 3)}", xy=(0.825, 0.06), xycoords="axes fraction", fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
-                #ax.annotate(f"Skill {round(measures[4], 3)}", xy=(0.825, 0.02), xycoords="axes fraction", fontsize=8, bbox=dict(boxstyle="square", fc="white", ec="white"))
                 plt.savefig(out_path/f"{d.station_id}.png", bbox_inches='tight', dpi=300)
                 plt.close(fig)
 
