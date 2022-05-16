@@ -66,9 +66,6 @@ def plot_models(output_dir, models, obs=None):
     # Find timespan that covers all model data
     start = min(pd.Timestamp(d.time.values[0]).tz_localize(None) for d in models.values())
     end = max(pd.Timestamp(d.time.values[-1]).tz_localize(None) for d in models.values())
-    if obs is not None:
-        start = min(start, obs.index[0])
-        end = max(end, obs.index[-1])
 
     if obs is not None:
         obs = obs.loc[start:end]
