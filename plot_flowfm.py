@@ -124,6 +124,7 @@ def main(args):
                                 usecols=['GageID', 'ProcessedCSVLoc'], 
                                 converters={'ProcessedCSVLoc': pathlib.Path})
         correspond.index = correspond.index.str.strip()
+        correspond = correspond.sort_index()
         if not correspond.index.is_unique:
             print(correspond.index[correspond.index.duplicated()])
             raise RuntimeError("GageID needs to be unique")
