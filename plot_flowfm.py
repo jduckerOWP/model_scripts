@@ -109,7 +109,7 @@ def main(args):
         hfile = d / "FlowFM_0000_his.nc"
         if hfile.exists():
             history_files[hfile] = fh = xr.open_dataset(hfile)
-            _stations = fh.station_name.values
+            _stations = fh.station_name.str.strip().values
             if stations is not None:
                 if (_stations != stations).any():
                     raise RuntimeError(f"Stations differ in {hfile}")
@@ -123,6 +123,7 @@ def main(args):
         correspond = pd.read_csv(args.correspond, index_col='GageID', 
                                 usecols=['GageID', 'ProcessedCSVLoc'], 
                                 converters={'ProcessedCSVLoc': pathlib.Path})
+        correspond.index = correspond.index.str.strip()
         if not correspond.index.is_unique:
             print(correspond.index[correspond.index.duplicated()])
             raise RuntimeError("GageID needs to be unique")
