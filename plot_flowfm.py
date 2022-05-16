@@ -66,12 +66,12 @@ def plot_models(output_dir, models, obs=None):
     ax = plt.gca()
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d'))
 
-    # Find smallest timespan and clip all datasets to that period
-    start = max(pd.Timestamp(d.time.values[0]).tz_localize('UTC') for d in models.values())
-    end = min(pd.Timestamp(d.time.values[-1]).tz_localize('UTC') for d in models.values())
+    # Find timespan that covers all model data
+    start = min(pd.Timestamp(d.time.values[0]).tz_localize(None) for d in models.values())
+    end = max(pd.Timestamp(d.time.values[-1]).tz_localize(None) for d in models.values())
     if obs is not None:
-        start = max(start, obs.index[0])
-        end = min(end, obs.index[-1])    
+        start = min(start, obs.index[0])
+        end = max(end, obs.index[-1])
 
     if obs is not None:
         obs = obs.loc[start:end]
