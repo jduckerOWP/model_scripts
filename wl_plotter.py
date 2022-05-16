@@ -473,7 +473,7 @@ def create_ts_dataframe(history_files, observation_root, observation_path, out_p
         print("Reading history file:", hs)
         with xr.open_dataset(hs) as DS:
             for i, station in enumerate(DS.station_name.values):
-                sn = station.decode()
+                sn = station.decode().strip()
                 if sn not in correspond.index:
                     continue
                 
