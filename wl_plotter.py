@@ -461,6 +461,8 @@ def create_ts_dataframe(history_files, observation_root, observation_path, out_p
     correspond = pd.read_csv(observation_path, index_col='GageID', 
                             usecols=['GageID', 'ProcessedCSVLoc'], 
                             converters={'ProcessedCSVLoc': pathlib.Path})
+    correspond.index = correspond.index.str.strip()
+    correspond = correspond.sort_index()
     if not correspond.index.is_unique:
         print(correspond.index[correspond.index.duplicated()])
         raise RuntimeError("GageID needs to be unique")
@@ -480,7 +482,7 @@ def create_ts_dataframe(history_files, observation_root, observation_path, out_p
                     continue
                 path = observation_root / fn
                 if not path.is_file():
-                    print("Skipping", path)
+                    print("Skipping", path, "(data file not found)")
                     continue
     
 
