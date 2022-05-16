@@ -592,7 +592,7 @@ def get_options():
     parser.add_argument('--output', default=pathlib.Path(), type=pathlib.Path, help="Output directory")
     parser.add_argument('-t', '--tide', action='store_true', default=False, help='Solve tidal for tidal constituents')
     parser.add_argument('-b', '--bias-correct', action='store_true', help="Bias correct all stations")
-    parser.add_arugment('-s', '--storm', default=['Any'], action='append', help="Storm filter")
+    parser.add_argument('-s', '--storm', default=['Any'], action='append', help="Storm filter")
     args = parser.parse_args()
 
     if args.dflow_history.is_dir():
