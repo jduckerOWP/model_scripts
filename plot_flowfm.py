@@ -60,7 +60,7 @@ def plot_models(output_dir, models, obs=None):
     if not models:
         return
     _tmp = next(iter(models.values()))
-    station = _tmp.station_name.item().decode()
+    station = _tmp.station_name.item().decode().strip()
     year = _tmp.time[0].values.astype("datetime64[Y]").item().year
     fig = plt.figure(figsize=(10, 5))
     ax = plt.gca()
