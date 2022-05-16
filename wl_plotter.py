@@ -453,16 +453,20 @@ def maxlim(model, obs):
     return axlim
 
     
-def create_ts_dataframe(history_files, observation_root, observation_path, out_path, tide=True, bias_correct=False):
+def create_ts_dataframe(history_files, observation_root, observation_path, out_path, tide=True, bias_correct=False, storm=None):
     twelve = datetime.timedelta(hours=12)
     summary = []
     tidal_summary = []
 
     correspond = pd.read_csv(observation_path, index_col='GageID', 
-                            usecols=['GageID', 'ProcessedCSVLoc'], 
+                            usecols=['GageID', 'Storm', 'ProcessedCSVLoc'], 
                             converters={'ProcessedCSVLoc': pathlib.Path})
     correspond.index = correspond.index.str.strip()
     correspond = correspond.sort_index()
+
+    # Filter by storm before uniqueness check
+    storm_mask = correspond["Storm"].isin(storm)
+    correspond = correspond.loc[storm_mask]
     if not correspond.index.is_unique:
         print(correspond.index[correspond.index.duplicated()])
         raise RuntimeError("GageID needs to be unique")
@@ -588,6 +592,7 @@ def get_options():
     parser.add_argument('--output', default=pathlib.Path(), type=pathlib.Path, help="Output directory")
     parser.add_argument('-t', '--tide', action='store_true', default=False, help='Solve tidal for tidal constituents')
     parser.add_argument('-b', '--bias-correct', action='store_true', help="Bias correct all stations")
+    parser.add_arugment('-s', '--storm', default=['Any'], action='append', help="Storm filter")
     args = parser.parse_args()
 
     if args.dflow_history.is_dir():
@@ -603,7 +608,7 @@ def get_options():
 if __name__ == "__main__":
     args = get_options()
     create_ts_dataframe(args.dflow_history, args.obs_root, args.obs_path, args.output, 
-                    tide=args.tide, bias_correct=args.bias_correct)
+                    tide=args.tide, bias_correct=args.bias_correct, storm=args.storm)
                 
             
             

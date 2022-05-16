@@ -121,10 +121,14 @@ def main(args):
     # load the correspondence table
     if args.correspond:
         correspond = pd.read_csv(args.correspond, index_col='GageID', 
-                                usecols=['GageID', 'ProcessedCSVLoc'], 
+                                usecols=['GageID', 'Storm', 'ProcessedCSVLoc'], 
                                 converters={'ProcessedCSVLoc': pathlib.Path})
         correspond.index = correspond.index.str.strip()
         correspond = correspond.sort_index()
+
+        # Filter by storm before uniqueness check
+        storm_mask = correspond["Storm"].isin(args.storm)
+        correspond = correspond.loc[storm_mask]
         if not correspond.index.is_unique:
             print(correspond.index[correspond.index.duplicated()])
             raise RuntimeError("GageID needs to be unique")
@@ -152,6 +156,7 @@ def get_options():
     parser.add_argument("--correspond", type=pathlib.Path, help='Data correspondence table')
     parser.add_argument("model", nargs='+', type=pathlib.Path, help="model folders")
     parser.add_argument("--mplstyle", help="Matplotlib style for plots")
+    parser.add_argument("-s", "--storm", default=["Any"], action="append", help="Storm filter")
     args = parser.parse_args()
 
     if args.obs and not args.correspond:
