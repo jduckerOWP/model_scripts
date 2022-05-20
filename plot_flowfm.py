@@ -127,7 +127,7 @@ def main(args):
             raise RuntimeError("GageID needs to be unique")
 
     _model = next(iter(history_files.values()))
-    stations = _model.station_name.values
+    stations = _model.stations.values
     for station in stations:
         st = station.decode()
         if args.correspond and station in correspond.index:
