@@ -97,18 +97,17 @@ def main(args):
     if args.mplstyle:
         plt.style.use(args.mplstyle)
 
+    filehandles = []
     history_files = {}
-    stations = None
     for d in args.model:
         hfile = d / "FlowFM_0000_his.nc"
         if hfile.exists():
-            history_files[hfile] = fh = xr.open_dataset(hfile)
-            _stations = fh.station_name.str.strip().values
-            if stations is not None:
-                if (_stations != stations).any():
-                    raise RuntimeError(f"Stations differ in {hfile}")
-            else:
-                stations = _stations
+            fh = xr.open_dataset(hfile)
+            filehandles.append(fh)
+            fh['station_name'] = fh.station_name.str.strip()
+            wl = fh.waterlevel
+            wl = wl.set_index(stations='station_name').sortby('stations')
+            history_files[hfile] = wl
         else:
             raise FileNotFoundError(f"Cannot find {hfile}")
 
@@ -127,9 +126,12 @@ def main(args):
             print(correspond.index[correspond.index.duplicated()])
             raise RuntimeError("GageID needs to be unique")
 
-    for i, station in enumerate(map(bytes.decode, stations)):
+    _model = next(iter(history_files.values()))
+    stations = _model.station_name.values
+    for station in stations:
+        st = station.decode()
         if args.correspond and station in correspond.index:
-            obspath = correspond.loc[station, "ProcessedCSVLoc"]
+            obspath = correspond.loc[st, "ProcessedCSVLoc"]
             try:
                 obsdata = open_csv(args.obs.joinpath(obspath))[0]
             except FileNotFoundError:
@@ -137,9 +139,21 @@ def main(args):
         else:
             obsdata = None
 
-        print("Plotting", station)
-        model_data = {f: d.waterlevel[:, i] for f,d in history_files.items()}
+        print("Plotting", st)
+        model_data = {}
+        for f, d in history_files.items():
+            data = d.loc[:, station]
+            if data.shape[1] > 1:
+                print("Duplicate stations skipped:", st)
+                continue
+            model_data[f] = d
         plot_models(args.output, model_data, obs=obsdata)
+
+    # Release resources
+    for wl in history_files.values():
+        wl.close()
+    for fh in filehandles:
+        fh.close()
 
 
 def get_options():
