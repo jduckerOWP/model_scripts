@@ -144,10 +144,11 @@ def main(args):
         for f, d in history_files.items():
             data = d.loc[:, station]
             if data.ndim > 1:
-                print("Duplicate stations skipped:", st)
-                continue
+                print("Skipping station because of duplicate data:", st)
+                break
             model_data[f.parent.parent.name] = data
-        plot_models(args.output, model_data, obs=obsdata)
+        else:
+            plot_models(args.output, model_data, obs=obsdata)
 
     # Release resources
     for wl in history_files.values():
