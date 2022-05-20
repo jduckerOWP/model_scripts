@@ -130,7 +130,7 @@ def main(args):
     stations = _model.stations.values
     for station in stations:
         st = station.decode()
-        if args.correspond and station in correspond.index:
+        if args.correspond and st in correspond.index:
             obspath = correspond.loc[st, "ProcessedCSVLoc"]
             try:
                 obsdata = open_csv(args.obs.joinpath(obspath))[0]
