@@ -81,7 +81,7 @@ def plot_models(output_dir, models, obs=None):
         if len(models) == 1:
             label = "Model"
         else:
-            label = f"Model ({f.parent.parent.name})"
+            label = f"Model ({f})"
         ax.plot(d.time.values, d.values, color=next(colors), linestyle='--', label=label, linewidth=2)
 
     ax.legend()
@@ -146,7 +146,7 @@ def main(args):
             if data.ndim > 1:
                 print("Duplicate stations skipped:", st)
                 continue
-            model_data[f] = d
+            model_data[f.parent.parent.name] = data
         plot_models(args.output, model_data, obs=obsdata)
 
     # Release resources
