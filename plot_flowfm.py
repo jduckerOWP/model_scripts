@@ -143,7 +143,7 @@ def main(args):
         model_data = {}
         for f, d in history_files.items():
             data = d.loc[:, station]
-            if data.shape[1] > 1:
+            if data.ndim > 1:
                 print("Duplicate stations skipped:", st)
                 continue
             model_data[f] = d
