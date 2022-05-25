@@ -94,9 +94,6 @@ def plot_models(output_dir, models, obs=None):
 
 
 def main(args):
-    if args.mplstyle:
-        plt.style.use(args.mplstyle)
-
     filehandles = []
     history_files = {}
     for d in args.model:
@@ -164,7 +161,6 @@ def get_options():
     parser.add_argument("--obs", type=pathlib.Path, help="data folder")
     parser.add_argument("--correspond", type=pathlib.Path, help='Data correspondence table')
     parser.add_argument("model", nargs='+', type=pathlib.Path, help="model folders")
-    parser.add_argument("--mplstyle", help="Matplotlib style for plots")
     parser.add_argument("-s", "--storm", default=["Any"], action="append", help="Storm filter")
     args = parser.parse_args()
 
