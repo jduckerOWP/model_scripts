@@ -405,14 +405,16 @@ def open_csv(filename):
         obstype = "usgs"
         if "NAVD88" in filename.name:
             return data, "NAVD88", obstype
+        elif "MSL" in filename.name:
+            return data, "MSL", obstype
         else:
             return data, "", obstype
     elif 'Water Level' in obs_ds.columns:
         data = coops_csv(obs_ds)
         obstype = "coops"
-        if "NAVD88" in filename.name:
+        if "NAVD88" in filename.parts:
             return data, "NAVD88", obstype
-        elif "MSL" in filename.name:
+        elif "MSL" in filename.parts:
             return data, "MSL", obstype
         else:
             return data, "", obstype
