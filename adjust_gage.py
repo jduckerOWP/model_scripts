@@ -25,7 +25,6 @@ COL_MAP = {'streamflow (ft^3/s)': 'streamflow (m^3/s)',
             "Elevation ocean/est (ft NAVD88)": "Elevation ocean/est (m NAVD88)",
             "Water Level (ft)": "Water Level (m)"}
             
-NAN_VALUES = [-999999]
 
 def real_stem(path):
     return path.name[:len(path.name) - sum(map(len, path.suffixes))]
@@ -34,6 +33,7 @@ def real_stem(path):
 def with_stem(path, stem):
     return path.with_name(stem + ''.join(path.suffixes))
     
+
 def adjusted_fn(path):
     key = path.name.split('.', 1)[0]
     if key in CORRECTIONS.index:
@@ -66,12 +66,6 @@ def ft_to_m(vals):
 
 def ft3_to_m3(vals):
     return vals * 0.3048**3
-    
-def filter_special_values(vals):
-    _vals = vals.copy()
-    for v in NAN_VALUES:
-        _vals[_vals == v] = np.nan
-    return _vals
 
 
 def load_corrections(corrections):
@@ -102,7 +96,7 @@ def adjust_station(path, out_path, only_write_adjusted=False):
 
     for c in COL_MAP.values():
         if c in data:
-            data[c] = ft_to_m(filter_special_values(data[c]))
+            data[c] = ft_to_m(data[c])
     print(" "*80, end="\r")
 
     if 'gage height (m)' in data.columns:
@@ -115,12 +109,14 @@ def adjust_station(path, out_path, only_write_adjusted=False):
         out_path.unlink()
     return (key, compute_stats(data))
     
+    
 def station_stats(path):
     """Compute stats on an already adjusted station"""
     key = path.name.split('.', 1)[0]
     data = pd.read_csv(path, low_memory=False)
     return (key, compute_stats(data))
     
+
 def compute_stats(df):
     """Compute min, max, and median of corrected columns in df"""
     return df[df.columns.intersection(COL_MAP.values())].describe()
