@@ -130,6 +130,7 @@ def main(args):
     stations = _model.stations.values
     for station in stations:
         st = station.decode()
+        print("Processing", st)
         if args.correspond and st in correspond.index:
             obspath = correspond.loc[st, "ProcessedCSVLoc"]
             try:
@@ -139,7 +140,6 @@ def main(args):
         else:
             obsdata = None
 
-        print("Plotting", st)
         model_data = {}
         for f, d in history_files.items():
             data = d.loc[:, station]
