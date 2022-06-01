@@ -396,57 +396,46 @@ def open_nc(filename):
         
 
 def open_csv(filename):
+    possible_dates = ["Date (utc)", "Date Time", "Date and Time (GMT)"]
+    possible_data = ["gage height (m)", "Water Level", 
+                    "Water level (m NAVD88)", "Elevation ocean/est (m NAVD88)"]
+
     obs_ds = pd.read_csv(filename, low_memory=False)
     # Remove possible spaces in column names
     obs_ds.columns = obs_ds.columns.str.strip()
 
-    if 'gage height (m)' in obs_ds.columns:
-        data = usgs_csv(obs_ds)
-        obstype = "usgs"
-        if "NAVD88" in filename.name:
-            return data, "NAVD88", obstype
-        elif "MSL" in filename.name:
-            return data, "MSL", obstype
-        else:
-            return data, "", obstype
-    elif 'Water Level' in obs_ds.columns:
-        data = coops_csv(obs_ds)
-        obstype = "coops"
-        if "NAVD88" in filename.parts:
-            return data, "NAVD88", obstype
-        elif "MSL" in filename.parts:
-            return data, "MSL", obstype
-        else:
-            return data, "", obstype
-    elif 'Water level (m NAVD88)' in obs_ds.columns:
-        return fev_csv(obs_ds), "NAVD88", "fev"
+    # Get date column
+    date_col = obs_ds.columns.isin(possible_dates)
+    values_col = obs_ds.columns.isin(possible_data)
+
+    if np.count_nonzero(date_col) != 1 and np.count_nonzero(values_col) != 1:
+        raise RuntimeError("Unknown CSV format")
     
-    raise RuntimeError("Unknown CSV format")
+    date_label = obs_ds.columns[date_col][0]
+    value_label = obs_ds.columns[values_col][0]
+    df = obs_ds.loc[:, [date_label, value_label]].rename(columns={date_label: "date", value_label: "measurement"})
+    df["date"] = pd.to_datetime(df["date"], infer_datetime_format=True)
+    df = df.loc[pd.notna(df["date"])]
+    df = df.set_index("date").sort_index().tz_localize(None)
 
+    if "NAVD88" in filename.name or "NAVD88" in value_label:
+        return df, "NAVD88"
+    else:
+        return df, ""
+
+
+def higher_resolution(df1, df2):
+    """Return the argument with the higher resolution"""
+    def mode(data):
+        values, counts = np.unique(np.diff(data), return_counts=True)
+        return values[counts.argmax()]
+
+    # Higher resolution timeseries has smaller diff
+    if mode(df1.index) < mode(df2.index):
+        return df1
+    else:
+        return df2
     
-def usgs_csv(df):
-    df['Date (utc)'] = pd.to_datetime(df['Date (utc)'], infer_datetime_format=True)
-    df = df.set_index("Date (utc)").sort_index()
-    df = df.loc[pd.notna(df.index)]
-    df.index = df.index.tz_localize(None)
-    return df['gage height (m)'].rename("observation")
-
-
-def coops_csv(df):
-    df["Date Time"] = pd.to_datetime(df["Date Time"], infer_datetime_format=True)
-    df = df.set_index("Date Time").sort_index()
-    df = df.loc[pd.notna(df.index)]
-    df.index = df.index.tz_localize(None)
-    return df["Water Level"].rename("observation")
-
-
-def fev_csv(df):
-    df["Date and Time (GMT)"] = pd.to_datetime(df["Date and Time (GMT)"], infer_datetime_format=True)
-    df = df.set_index("Date and Time (GMT)").sort_index()
-    df = df.loc[pd.notna(df.index)]
-    df.index = df.index.tz_localize(None)
-    return df["Water level (m NAVD88)"].rename("observation")
-
 
 def maxlim(model, obs):
     # Compute max axis value for plots.
@@ -516,7 +505,7 @@ def create_ts_dataframe(history_files, observation_root, observation_path, out_p
                 obsfreq = obs.index[1] - obs.index[0]
                 
                 # Resample model to frequency of obs
-                if obstype == "fev":
+                if higher_resolution(obs, model) is obs:
                     # Downsample observations to match model, but do not interpolate
                     obs_data = obs.resample(modelfreq, origin=model.index[0]).asfreq()
                     model_data = model

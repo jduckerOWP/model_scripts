@@ -1,5 +1,6 @@
 import argparse
 import pathlib
+import numpy as np
 import xarray as xr
 import pandas as pd
 
@@ -14,46 +15,32 @@ del MODEL_COLORS['w']
 del MODEL_COLORS['r']
 
 def open_csv(filename):
+    possible_dates = ["Date (utc)", "Date Time", "Date and Time (GMT)"]
+    possible_data = ["gage height (m)", "Water Level", 
+                    "Water level (m NAVD88)", "Elevation ocean/est (m NAVD88)"]
+
     obs_ds = pd.read_csv(filename, low_memory=False)
     # Remove possible spaces in column names
     obs_ds.columns = obs_ds.columns.str.strip()
 
-    if 'gage height (m)' in obs_ds.columns:
-        data = usgs_csv(obs_ds)
-        if "NAVD88" in filename.name:
-            return data, "NAVD88"
-        else:
-            return data, ""
-    elif 'Water Level' in obs_ds.columns:
-        return coops_csv(obs_ds), ""
-    elif 'Water level (m NAVD88)' in obs_ds.columns:
-        return fev_csv(obs_ds), "NAVD88"
-    else:
+    # Get date column
+    date_col = obs_ds.columns.isin(possible_dates)
+    values_col = obs_ds.columns.isin(possible_data)
+
+    if np.count_nonzero(date_col) != 1 and np.count_nonzero(values_col) != 1:
         raise RuntimeError("Unknown CSV format")
+    
+    date_label = obs_ds.columns[date_col][0]
+    value_label = obs_ds.columns[values_col][0]
+    df = obs_ds.loc[:, [date_label, value_label]].rename(columns={date_label: "date", value_label: "measurement"})
+    df["date"] = pd.to_datetime(df["date"], infer_datetime_format=True).tz_localize(None)
+    df = df.loc[pd.notna(df["date"])]
+    df = df.set_index("date").sort_index()
 
-
-def usgs_csv(df):
-    df['Date (utc)'] = pd.to_datetime(df['Date (utc)'], infer_datetime_format=True)
-    df = df.set_index("Date (utc)").sort_index()
-    df = df.loc[pd.notna(df.index)]
-    df.index = df.index.tz_localize(None)
-    return df['gage height (m)'].rename("observation")
-
-
-def coops_csv(df):
-    df["Date Time"] = pd.to_datetime(df["Date Time"], infer_datetime_format=True)
-    df = df.set_index("Date Time").sort_index()
-    df = df.loc[pd.notna(df.index)]
-    df.index = df.index.tz_localize(None)
-    return df["Water Level"].rename("observation")
-
-
-def fev_csv(df):
-    df["Date and Time (GMT)"] = pd.to_datetime(df["Date and Time (GMT)"], infer_datetime_format=True)
-    df = df.set_index("Date and Time (GMT)").sort_index()
-    df = df.loc[pd.notna(df.index)]
-    df.index = df.index.tz_localize(None)
-    return df["Water level (m NAVD88)"].rename("observation")
+    if "NAVD88" in filename.name or "NAVD88" in value_label:
+        return df, "NAVD88"
+    else:
+        return df, ""
 
 
 def plot_models(output_dir, models, obs=None):
