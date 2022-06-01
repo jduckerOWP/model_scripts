@@ -427,24 +427,24 @@ def open_csv(filename):
 def usgs_csv(df):
     df['Date (utc)'] = pd.to_datetime(df['Date (utc)'], infer_datetime_format=True)
     df = df.set_index("Date (utc)").sort_index()
-    if not df.index.tz:
-        df.index = df.index.tz_localize("UTC")
+    df = df.loc[pd.notna(df.index)]
+    df.index = df.index.tz_localize(None)
     return df['gage height (m)'].rename("observation")
 
 
 def coops_csv(df):
     df["Date Time"] = pd.to_datetime(df["Date Time"], infer_datetime_format=True)
     df = df.set_index("Date Time").sort_index()
-    if not df.index.tz:
-        df.index = df.index.tz_localize("UTC")
+    df = df.loc[pd.notna(df.index)]
+    df.index = df.index.tz_localize(None)
     return df["Water Level"].rename("observation")
 
 
 def fev_csv(df):
     df["Date and Time (GMT)"] = pd.to_datetime(df["Date and Time (GMT)"], infer_datetime_format=True)
     df = df.set_index("Date and Time (GMT)").sort_index()
-    if not df.index.tz:
-        df.index = df.index.tz_localize("UTC")
+    df = df.loc[pd.notna(df.index)]
+    df.index = df.index.tz_localize(None)
     return df["Water level (m NAVD88)"].rename("observation")
 
 
@@ -501,7 +501,7 @@ def create_ts_dataframe(history_files, observation_root, observation_path, out_p
                 T = model.index[model.index >= model.index[0]+twelve]
                 # drop first twelve hours of model to remove warmup effects
                 model = model.loc[T]
-                model.index = model.index.tz_localize('UTC')
+                model.index = model.index.tz_localize(None)
                 modelfreq = model.index[1] - model.index[0]
 
                 # Get the observation data
