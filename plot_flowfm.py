@@ -121,7 +121,7 @@ def main(args):
             metadata = correspond.loc[st]
             obspath = metadata["ProcessedCSVLoc"]
             try:
-                obsdata = open_csv(args.obs.joinpath(obspath))[0]
+                obsdata = open_csv(args.obs.joinpath(obspath))
                 datum = metadata["Datum"]
             except FileNotFoundError:
                 obsdata = None
