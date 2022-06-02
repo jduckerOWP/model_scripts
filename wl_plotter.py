@@ -457,6 +457,7 @@ def create_ts_dataframe(history_files, observation_root, observation_path, out_p
     if not correspond.index.is_unique:
         print(correspond.index[correspond.index.duplicated()])
         raise RuntimeError("GageID needs to be unique")
+    correspond.loc[pd.isna(correspond["Datum"]), "Datum"] = None
 
     out_path.mkdir(parents=True, exist_ok=True)
 

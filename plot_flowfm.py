@@ -111,6 +111,7 @@ def main(args):
         if not correspond.index.is_unique:
             print(correspond.index[correspond.index.duplicated()])
             raise RuntimeError("GageID needs to be unique")
+        correspond.loc[pd.isna(correspond["Datum"]), "Datum"] = None
 
     _model = next(iter(history_files.values()))
     stations = _model.stations.values
