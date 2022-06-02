@@ -17,7 +17,7 @@ del MODEL_COLORS['r']
 def open_csv(filename):
     possible_dates = ["Date (utc)", "Date Time", "Date and Time (GMT)"]
     possible_data = ["gage height (m)", "Water Level", 
-                    "Water level (m NAVD88)", "Elevation ocean/est (m NAVD88)"]
+                    "Water level (m NAVD88)", "Elevation ocean/est (m NAVD88)", "Prediction"]
 
     obs_ds = pd.read_csv(filename, low_memory=False)
     # Remove possible spaces in column names
@@ -37,13 +37,10 @@ def open_csv(filename):
     df = df.loc[pd.notna(df["date"])]
     df = df.set_index("date").sort_index()
 
-    if "NAVD88" in filename.name or "NAVD88" in value_label:
-        return df, "NAVD88"
-    else:
-        return df, ""
+    return df
 
 
-def plot_models(output_dir, models, obs=None):
+def plot_models(output_dir, models, obs=None, datum=None):
     if not models:
         return
     _tmp = next(iter(models.values()))
@@ -78,7 +75,10 @@ def plot_models(output_dir, models, obs=None):
     ax.grid()
     ax.set_title(f"Station ID: {station}", size=20, fontweight='bold')
     ax.set_xlabel(f"Date [{year}]", size=15)
-    ax.set_ylabel("Water level (m)", size=15)
+    if datum:
+        ax.set_ylabel(f"Water level (m {datum})", size=15)
+    else:
+        ax.set_ylabel("Water level (m)", size=15)
     plt.savefig(output_dir/f"{station}.png", bbox_inches='tight', dpi=300)
     plt.close(fig)
 
@@ -101,7 +101,6 @@ def main(args):
     # load the correspondence table
     if args.correspond:
         correspond = pd.read_csv(args.correspond, index_col='GageID', 
-                                usecols=['GageID', 'Storm', 'ProcessedCSVLoc'], 
                                 converters={'ProcessedCSVLoc': pathlib.Path})
         correspond.index = correspond.index.str.strip()
         correspond = correspond.sort_index()
@@ -119,13 +118,17 @@ def main(args):
         st = station.decode()
         print("Processing", st)
         if args.correspond and st in correspond.index:
-            obspath = correspond.loc[st, "ProcessedCSVLoc"]
+            metadata = correspond.loc[st]
+            obspath = metadata["ProcessedCSVLoc"]
             try:
                 obsdata = open_csv(args.obs.joinpath(obspath))[0]
+                datum = metadata["Datum"]
             except FileNotFoundError:
                 obsdata = None
+                datum = None
         else:
             obsdata = None
+            datum = None
 
         model_data = {}
         for f, d in history_files.items():
@@ -135,7 +138,7 @@ def main(args):
                 break
             model_data[f.parent.parent.name] = data
         else:
-            plot_models(args.output, model_data, obs=obsdata)
+            plot_models(args.output, model_data, obs=obsdata, datum=datum)
 
     # Release resources
     for wl in history_files.values():

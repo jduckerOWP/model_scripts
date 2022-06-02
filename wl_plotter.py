@@ -398,7 +398,7 @@ def open_nc(filename):
 def open_csv(filename):
     possible_dates = ["Date (utc)", "Date Time", "Date and Time (GMT)"]
     possible_data = ["gage height (m)", "Water Level", 
-                    "Water level (m NAVD88)", "Elevation ocean/est (m NAVD88)"]
+                    "Water level (m NAVD88)", "Elevation ocean/est (m NAVD88)", "Prediction"]
 
     obs_ds = pd.read_csv(filename, low_memory=False)
     # Remove possible spaces in column names
@@ -418,10 +418,7 @@ def open_csv(filename):
     df = df.loc[pd.notna(df["date"])]
     df = df.set_index("date").sort_index().tz_localize(None)
 
-    if "NAVD88" in filename.name or "NAVD88" in value_label:
-        return df, "NAVD88"
-    else:
-        return df, ""
+    return df
 
 
 def higher_resolution(df1, df2):
@@ -450,7 +447,6 @@ def create_ts_dataframe(history_files, observation_root, observation_path, out_p
     tidal_summary = []
 
     correspond = pd.read_csv(observation_path, index_col='GageID', 
-                            usecols=['GageID', 'Storm', 'ProcessedCSVLoc'], 
                             converters={'ProcessedCSVLoc': pathlib.Path})
     correspond.index = correspond.index.str.strip()
     correspond = correspond.sort_index()
@@ -472,7 +468,8 @@ def create_ts_dataframe(history_files, observation_root, observation_path, out_p
                 if sn not in correspond.index:
                     continue
                 
-                fn = pathlib.Path(correspond.loc[sn, "ProcessedCSVLoc"])
+                metadata = correspond.loc[sn]
+                fn = metadata["ProcessedCSVLoc"]
                 if not fn.name:
                     continue
                 path = observation_root / fn
@@ -480,7 +477,7 @@ def create_ts_dataframe(history_files, observation_root, observation_path, out_p
                     print("Skipping", path, "(data file not found)")
                     continue
     
-
+                
                 model = DS.loc[{'stations': i}]['waterlevel']
                 if np.isnan(model.values).all():
                     continue
@@ -494,7 +491,7 @@ def create_ts_dataframe(history_files, observation_root, observation_path, out_p
                 modelfreq = model.index[1] - model.index[0]
 
                 # Get the observation data
-                obs, datum, obstype = open_csv(path)
+                obs = open_csv(path)
 
                 # Restrict observation range to model range
                 obs = obs.loc[model.index[0]:model.index[-1]+modelfreq]
@@ -520,7 +517,7 @@ def create_ts_dataframe(history_files, observation_root, observation_path, out_p
                     print("Joined dataframe is empty")
                     continue                
                 
-                d = TSData(datum, sn, joined, bias_correct=bias_correct)
+                d = TSData(metadata['Datum'], sn, joined, bias_correct=bias_correct)
 
                 print("writing and plotting", d.station_id)
                 d.data.to_csv(out_path/f'{d.station_id}.csv')
