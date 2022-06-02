@@ -492,6 +492,7 @@ def create_ts_dataframe(history_files, observation_root, observation_path, out_p
 
                 # Get the observation data
                 obs = open_csv(path)
+                obs = obs.rename(columns={'measurement': 'observation'})
 
                 # Restrict observation range to model range
                 obs = obs.loc[model.index[0]:model.index[-1]+modelfreq]
