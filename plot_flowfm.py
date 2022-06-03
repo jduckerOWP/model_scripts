@@ -83,10 +83,18 @@ def plot_models(output_dir, models, obs=None, datum=None):
     plt.close(fig)
 
 
+def detect_model_labels(models):
+    while True:
+        models = tuple(m.parent for m in models)
+        rv = tuple(m.name for m in models)
+        if len(set(rv)) == len(rv):
+            return rv
+
+
 def main(args):
     filehandles = []
     history_files = {}
-    for d in args.model:
+    for label, d in zip(detect_model_labels(args.model), args.model):
         hfile = d / "FlowFM_0000_his.nc"
         if hfile.exists():
             fh = xr.open_dataset(hfile)
@@ -94,7 +102,7 @@ def main(args):
             fh['station_name'] = fh.station_name.str.strip()
             wl = fh.waterlevel
             wl = wl.set_index(stations='station_name').sortby('stations')
-            history_files[hfile] = wl
+            history_files[label] = wl
         else:
             raise FileNotFoundError(f"Cannot find {hfile}")
 
@@ -137,7 +145,7 @@ def main(args):
             if data.ndim > 1:
                 print("Skipping station because of duplicate data:", st)
                 break
-            model_data[f.parent.parent.name] = data
+            model_data[f] = data
         else:
             plot_models(args.output, model_data, obs=obsdata, datum=datum)
 
