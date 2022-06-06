@@ -14,7 +14,7 @@ def main(args):
 
     merged = xr.concat(datasets, 'time', data_vars='minimal', coords='minimal')
     dups = merged.time.to_index().duplicated()
-    merged = merged.sel({'time': ~dups})
+    merged = merged.sel({'time': ~dups}).sortby('time')
     merged.to_netcdf(args.output)
 
     for f in datasets:
