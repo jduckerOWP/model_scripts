@@ -10,9 +10,6 @@ from matplotlib import pyplot as plt
 import matplotlib.dates as mdates
 import matplotlib.colors as mcolors
 
-MODEL_COLORS = mcolors.BASE_COLORS.copy()
-del MODEL_COLORS['w']
-del MODEL_COLORS['r']
 
 def open_csv(filename):
     possible_dates = ["Date (utc)", "Date Time", "Date and Time (GMT)"]
@@ -57,10 +54,10 @@ def plot_models(output_dir, models, obs=None, datum=None):
     if obs is not None:
         obs = obs.loc[start:end]
         if pd.notna(obs.values).any():
-            ax.plot(obs.index.to_pydatetime(), obs.values, 'r', label="Measurement", linewidth=2)
+            ax.plot(obs.index.to_pydatetime(), obs.values, 'red', label="Measurement", linewidth=2)
     
-    colors = iter(MODEL_COLORS.values())
-    for f, d in models.items():
+    colors = ('blue', 'black', 'green', 'purple', 'cyan')
+    for c, (f, d) in zip(colors, models.items()):
         d = d.sel({'time': slice(start.tz_localize(None), end.tz_localize(None))})
         if pd.isna(d.values).all():
             # Skip models that are null
@@ -69,7 +66,7 @@ def plot_models(output_dir, models, obs=None, datum=None):
             label = "Model"
         else:
             label = f"Model ({f})"
-        ax.plot(d.time.values, d.values, color=next(colors), linestyle='--', label=label, linewidth=2)
+        ax.plot(d.time.values, d.values, color=c, linestyle='--', label=label, linewidth=2)
 
     ax.legend()
     ax.grid()
