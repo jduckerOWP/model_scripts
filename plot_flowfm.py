@@ -105,9 +105,8 @@ def main(args):
 
     # load the correspondence table
     if args.correspond:
-        correspond = pd.read_csv(args.correspond, 
-                                converters={'ProcessedCSVLoc': pathlib.Path,
-                                            'GageID': str})
+        correspond = pd.read_csv(args.correspond, dtype={'GageID': 'string'},
+                                converters={'ProcessedCSVLoc': pathlib.Path})
         correspond['GageID'] = correspond['GageID'].str.strip()
         correspond = correspond.set_index('GageID').sort_index()
 

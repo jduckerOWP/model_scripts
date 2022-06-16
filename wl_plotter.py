@@ -446,9 +446,8 @@ def create_ts_dataframe(history_files, observation_root, observation_path, out_p
     summary = []
     tidal_summary = []
 
-    correspond = pd.read_csv(args.correspond, 
-                            converters={'ProcessedCSVLoc': pathlib.Path,
-                                        'GageID': str})
+    correspond = pd.read_csv(args.correspond, dtype={'GageID': 'string'},
+                            converters={'ProcessedCSVLoc': pathlib.Path})
     correspond['GageID'] = correspond['GageID'].str.strip()
     correspond = correspond.set_index('GageID').sort_index()
 
