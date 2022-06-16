@@ -105,10 +105,11 @@ def main(args):
 
     # load the correspondence table
     if args.correspond:
-        correspond = pd.read_csv(args.correspond, index_col='GageID', 
-                                converters={'ProcessedCSVLoc': pathlib.Path})
-        correspond.index = correspond.index.str.strip()
-        correspond = correspond.sort_index()
+        correspond = pd.read_csv(args.correspond, 
+                                converters={'ProcessedCSVLoc': pathlib.Path,
+                                            'GageID': str})
+        correspond['GageID'] = correspond['GageID'].str.strip()
+        correspond = correspond.set_index('GageID').sort_index()
 
         # Filter by storm before uniqueness check
         storm_mask = correspond["Storm"].isin(args.storm)

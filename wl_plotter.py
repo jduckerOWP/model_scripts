@@ -446,10 +446,11 @@ def create_ts_dataframe(history_files, observation_root, observation_path, out_p
     summary = []
     tidal_summary = []
 
-    correspond = pd.read_csv(observation_path, index_col='GageID', 
-                            converters={'ProcessedCSVLoc': pathlib.Path})
-    correspond.index = correspond.index.str.strip()
-    correspond = correspond.sort_index()
+    correspond = pd.read_csv(args.correspond, 
+                            converters={'ProcessedCSVLoc': pathlib.Path,
+                                        'GageID': str})
+    correspond['GageID'] = correspond['GageID'].str.strip()
+    correspond = correspond.set_index('GageID').sort_index()
 
     # Filter by storm before uniqueness check
     storm_mask = correspond["Storm"].isin(storm)
