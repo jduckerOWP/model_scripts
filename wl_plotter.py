@@ -441,7 +441,7 @@ def maxlim(model, obs):
     return axlim
 
     
-def create_ts_dataframe(history_files, observation_root, observation_path, out_path, tide=True, bias_correct=False, storm=None):
+def main(args):
     twelve = datetime.timedelta(hours=12)
     summary = []
     tidal_summary = []
@@ -452,16 +452,16 @@ def create_ts_dataframe(history_files, observation_root, observation_path, out_p
     correspond = correspond.set_index('GageID').sort_index()
 
     # Filter by storm before uniqueness check
-    storm_mask = correspond["Storm"].isin(storm)
+    storm_mask = correspond["Storm"].isin(args.storm)
     correspond = correspond.loc[storm_mask]
     if not correspond.index.is_unique:
         print(correspond.index[correspond.index.duplicated()])
         raise RuntimeError("GageID needs to be unique")
     correspond.loc[pd.isna(correspond["Datum"]), "Datum"] = None
 
-    out_path.mkdir(parents=True, exist_ok=True)
+    args.output.mkdir(parents=True, exist_ok=True)
 
-    for hs in history_files:
+    for hs in args.dflow_history:
         print("Reading history file:", hs)
         with xr.open_dataset(hs) as DS:
             for i, station in enumerate(DS.station_name.values):
@@ -473,7 +473,7 @@ def create_ts_dataframe(history_files, observation_root, observation_path, out_p
                 fn = metadata["ProcessedCSVLoc"]
                 if not fn.name:
                     continue
-                path = observation_root / fn
+                path = args.obs / fn
                 if not path.is_file():
                     print("Skipping", path, "(data file not found)")
                     continue
@@ -519,10 +519,10 @@ def create_ts_dataframe(history_files, observation_root, observation_path, out_p
                     print("Joined dataframe is empty")
                     continue                
                 
-                d = TSData(metadata['Datum'], sn, joined, bias_correct=bias_correct)
+                d = TSData(metadata['Datum'], sn, joined, bias_correct=args.bias_correct)
 
                 print("writing and plotting", d.station_id)
-                d.data.to_csv(out_path/f'{d.station_id}.csv')
+                d.data.to_csv(args.output/f'{d.station_id}.csv')
                 fig = plt.figure(figsize=(10, 5))
                 ax = plt.gca()
                 ax.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d'))
@@ -548,12 +548,12 @@ def create_ts_dataframe(history_files, observation_root, observation_path, out_p
                         fontsize=8,
                         xycoords="axes fraction",
                         bbox={'boxstyle': 'square', 'facecolor': 'white', 'alpha': 0.75})
-                plt.savefig(out_path/f"{d.station_id}.png", bbox_inches='tight', dpi=300)
+                plt.savefig(args.output/f"{d.station_id}.png", bbox_inches='tight', dpi=300)
                 plt.close(fig)
 
-                if tide:
+                if args.tide:
                     mt, ot = tidal_analysis(d)
-                    tide_plots(mt, ot, out_path, d.station_id)
+                    tide_plots(mt, ot, args.output, d.station_id)
                     mt["station"] = d.station_id
                     ot["station"] = d.station_id
                     tidal_summary.append((mt, ot))
@@ -563,26 +563,26 @@ def create_ts_dataframe(history_files, observation_root, observation_path, out_p
     summary_df["idx"] = list(range(len(summary)))
     #summary_df = summary_df.groupby('station_id').apply(lambda x: x.iloc[x.skill.argmax()])
     sel_idx = set(summary_df["idx"])
-    summary_df.drop(columns=["idx"]).to_csv(out_path/"summary.csv", index=False)
+    summary_df.drop(columns=["idx"]).to_csv(args.output/"summary.csv", index=False)
 
-    if tide:
+    if args.tide:
         model_df = pd.concat([x[0] for x in map(tidal_summary.__getitem__, sel_idx)]).reset_index()
         obs_df = pd.concat([x[1] for x in map(tidal_summary.__getitem__, sel_idx)]).reset_index()
 
-        amplitude_plot(model_df, obs_df, out_path)
-        tidal_error(model_df, obs_df, out_path)
+        amplitude_plot(model_df, obs_df, args.output)
+        tidal_error(model_df, obs_df, args.output)
 
 
 def get_options():
     parser = argparse.ArgumentParser()
     
     parser.add_argument('dflow_history', type=pathlib.Path, help='DFlow history NetCDF')
-    parser.add_argument('obs_root', type=pathlib.Path, help="Root path for observations")
-    parser.add_argument('obs_path', type=pathlib.Path, help="Path to observation correspondence file")
     parser.add_argument('--output', default=pathlib.Path(), type=pathlib.Path, help="Output directory")
     parser.add_argument('-t', '--tide', action='store_true', default=False, help='Solve tidal for tidal constituents')
     parser.add_argument('-b', '--bias-correct', action='store_true', help="Bias correct all stations")
     parser.add_argument('-s', '--storm', default=['Any'], action='append', help="Storm filter")
+    parser.add_argument("--obs", type=pathlib.Path, help="data folder")
+    parser.add_argument("--correspond", type=pathlib.Path, help='Data correspondence table')
     args = parser.parse_args()
 
     if args.dflow_history.is_dir():
@@ -597,8 +597,6 @@ def get_options():
 
 if __name__ == "__main__":
     args = get_options()
-    create_ts_dataframe(args.dflow_history, args.obs_root, args.obs_path, args.output, 
-                    tide=args.tide, bias_correct=args.bias_correct, storm=args.storm)
-                
+    main(args)               
             
             
