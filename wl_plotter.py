@@ -440,6 +440,14 @@ def maxlim(model, obs):
     axlim = max(round(maxav, 1), 0.1)
     return axlim
 
+
+def open_his_waterlevel(fn):
+    with xr.open_dataset(fn) as ds:
+        ds['station_name'] = ds.station_name.str.strip()
+        waterlevel = ds.waterlevel
+        waterlevel = waterlevel.set_index(stations='station_name').sortby('stations')
+        return waterlevel
+
     
 def main(args):
     twelve = datetime.timedelta(hours=12)
@@ -461,102 +469,103 @@ def main(args):
 
     args.output.mkdir(parents=True, exist_ok=True)
 
-    for hs in args.dflow_history:
-        print("Reading history file:", hs)
-        with xr.open_dataset(hs) as DS:
-            for i, station in enumerate(DS.station_name.values):
-                sn = station.decode().strip()
-                if sn not in correspond.index:
-                    continue
-                
-                metadata = correspond.loc[sn]
-                fn = metadata["ProcessedCSVLoc"]
-                if not fn.name:
-                    continue
-                path = args.obs / fn
-                if not path.is_file():
-                    print("Skipping", path, "(data file not found)")
-                    continue
-    
-                
-                model = DS.loc[{'stations': i}]['waterlevel']
-                if np.isnan(model.values).all():
-                    continue
-                model = model.drop_vars(['station_x_coordinate', 'station_y_coordinate', 'station_name'])
-                model = model.to_dataframe().rename(columns={"waterlevel": "model"})
+    waterlevels = [open_his_waterlevel(fn) for fn in args.dflow_history]
+    for station in correspond.index:
+        metadata = correspond.loc[station]
+        fn = metadata["ProcessedCSVLoc"]
+        if not fn.name:
+            continue
+        path = args.obs / fn
+        if not path.is_file():
+            print("Skipping", path, "(data file not found)")
+            continue
 
-                T = model.index[model.index >= model.index[0]+twelve]
-                # drop first twelve hours of model to remove warmup effects
-                model = model.loc[T]
-                model.index = model.index.tz_localize(None)
-                modelfreq = model.index[1] - model.index[0]
+        # Find first non-constant timeseries in history file
+        for DS in waterlevels:
+            model = DS.loc[{'stations': station.encode()}]
+            if np.isnan(model.values).all():
+                continue
+            if not np.allclose(model[0], model):
+                break
+        model = model.drop_vars(['station_x_coordinate', 'station_y_coordinate', 'station_name'])
+        model = model.to_dataframe().rename(columns={"waterlevel": "model"})
 
-                # Get the observation data
-                obs = open_csv(path)
-                obs = obs.rename(columns={'measurement': 'observation'})
+        T = model.index[model.index >= model.index[0]+twelve]
+        # drop first twelve hours of model to remove warmup effects
+        model = model.loc[T]
+        model.index = model.index.tz_localize(None)
+        modelfreq = model.index[1] - model.index[0]
 
-                # Restrict observation range to model range
-                obs = obs.loc[model.index[0]:model.index[-1]+modelfreq]
-                
-                # At times obs is malformed csv, so we check if len == 1.
-                if obs.empty or len(obs) == 1 or model.empty:
-                    continue
-                obsfreq = obs.index[1] - obs.index[0]
-                
-                # Resample model to frequency of obs
-                if higher_resolution(obs, model) is obs:
-                    # Downsample observations to match model, but do not interpolate
-                    obs_data = obs.resample(modelfreq, origin=model.index[0]).asfreq()
-                    model_data = model
-                else:
-                    # Resample and interpolate model
-                    model_data = model.resample(obsfreq, origin=obs.index[0]).interpolate(method='linear')
-                    obs_data = obs.asfreq(obsfreq)  # Ensure that obs is regular
+        # Get the observation data
+        obs = open_csv(path)
+        obs = obs.rename(columns={'measurement': 'observation'})
 
-                # Drop leading/trailing nans from obs
-                joined = model_data.join(obs_data, how='inner').sort_index().dropna()
-                if joined.empty:
-                    print("Joined dataframe is empty")
-                    continue                
-                
-                d = TSData(metadata['Datum'], sn, joined, bias_correct=args.bias_correct)
+        # Restrict observation range to model range
+        obs = obs.loc[model.index[0]:model.index[-1]+modelfreq]
+        
+        # At times obs is malformed csv, so we check if len == 1.
+        if obs.empty or len(obs) == 1 or model.empty:
+            continue
+        obsfreq = obs.index[1] - obs.index[0]
+        
+        # Resample model to frequency of obs
+        if higher_resolution(obs, model) is obs:
+            # Downsample observations to match model, but do not interpolate
+            obs_data = obs.resample(modelfreq, origin=model.index[0]).asfreq()
+            model_data = model
+        else:
+            # Resample and interpolate model
+            model_data = model.resample(obsfreq, origin=obs.index[0]).interpolate(method='linear')
+            obs_data = obs.asfreq(obsfreq)  # Ensure that obs is regular
 
-                print("writing and plotting", d.station_id)
-                d.data.to_csv(args.output/f'{d.station_id}.csv')
-                fig = plt.figure(figsize=(10, 5))
-                ax = plt.gca()
-                ax.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d'))
+        # Drop leading/trailing nans from obs
+        joined = model_data.join(obs_data, how='inner').sort_index().dropna()
+        if joined.empty:
+            print("Joined dataframe is empty")
+            continue                
+        
+        d = TSData(metadata['Datum'], station, joined, bias_correct=args.bias_correct)
 
-                ax.plot(obs_data, 'r', marker=',', linestyle='-', label="Measured", linewidth=2)
-                ax.plot(model_data, 'b', marker=',', linestyle='-', label="Model", linewidth=2)
-                ax.legend()
-                ax.grid()
-                ax.set_title(f"Station ID: {d.station_id}", size=20, fontweight='bold')
+        print("writing and plotting", d.station_id)
+        d.data.to_csv(args.output/f'{d.station_id}.csv')
+        fig = plt.figure(figsize=(10, 5))
+        ax = plt.gca()
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d'))
 
-                if d.datum:
-                    ax.set_ylabel(f"Water level (m {d.datum})", size=15)
-                else:
-                    ax.set_ylabel("Water level (m)", size=15)
+        ax.plot(obs_data, 'r', marker=',', linestyle='-', label="Measured", linewidth=2)
+        ax.plot(model_data, 'b', marker=',', linestyle='-', label="Model", linewidth=2)
+        ax.legend()
+        ax.grid()
+        ax.set_title(f"Station ID: {d.station_id}", size=20, fontweight='bold')
 
-                ax.set_xlabel(f"Date [{d.data.index[0].year}]", size=15)
-                measures = (d.bias(), d.corr()[0], d.rmse(), d.nrmse(), d.skill())
-                summary.append((d.station_id,) + measures)
-                # add timeseries statistics
-                measures = tuple(round(x, 3) for x in measures)
-                stat_str = f"Bias: {measures[0]}\nCorr: {measures[1]}\nRMSE: {measures[2]}\nNRMSE: {measures[3]}\nSkill: {measures[4]}"
-                ax.annotate(stat_str, xy=(0.825, 0.06), 
-                        fontsize=8,
-                        xycoords="axes fraction",
-                        bbox={'boxstyle': 'square', 'facecolor': 'white', 'alpha': 0.75})
-                plt.savefig(args.output/f"{d.station_id}.png", bbox_inches='tight', dpi=300)
-                plt.close(fig)
+        if d.datum:
+            ax.set_ylabel(f"Water level (m {d.datum})", size=15)
+        else:
+            ax.set_ylabel("Water level (m)", size=15)
 
-                if args.tide:
-                    mt, ot = tidal_analysis(d)
-                    tide_plots(mt, ot, args.output, d.station_id)
-                    mt["station"] = d.station_id
-                    ot["station"] = d.station_id
-                    tidal_summary.append((mt, ot))
+        ax.set_xlabel(f"Date [{d.data.index[0].year}]", size=15)
+        measures = (d.bias(), d.corr()[0], d.rmse(), d.nrmse(), d.skill())
+        summary.append((d.station_id,) + measures)
+        # add timeseries statistics
+        measures = tuple(round(x, 3) for x in measures)
+        stat_str = f"Bias: {measures[0]}\nCorr: {measures[1]}\nRMSE: {measures[2]}\nNRMSE: {measures[3]}\nSkill: {measures[4]}"
+        ax.annotate(stat_str, xy=(0.825, 0.06), 
+                fontsize=8,
+                xycoords="axes fraction",
+                bbox={'boxstyle': 'square', 'facecolor': 'white', 'alpha': 0.75})
+        plt.savefig(args.output/f"{d.station_id}.png", bbox_inches='tight', dpi=300)
+        plt.close(fig)
+
+        if args.tide:
+            mt, ot = tidal_analysis(d)
+            tide_plots(mt, ot, args.output, d.station_id)
+            mt["station"] = d.station_id
+            ot["station"] = d.station_id
+            tidal_summary.append((mt, ot))
+
+    # Close waterlevel datasets
+    for wl in waterlevels:
+        wl.close()
 
     #Filter summary and tidal_summary (if necessary) by skill
     summary_df = pd.DataFrame(summary, columns=['station_id', 'bias', 'corr', 'rmse', 'nrmse', 'skill'])
@@ -581,8 +590,8 @@ def get_options():
     parser.add_argument('-t', '--tide', action='store_true', default=False, help='Solve tidal for tidal constituents')
     parser.add_argument('-b', '--bias-correct', action='store_true', help="Bias correct all stations")
     parser.add_argument('-s', '--storm', default=['Any'], action='append', help="Storm filter")
-    parser.add_argument("--obs", type=pathlib.Path, help="data folder")
-    parser.add_argument("--correspond", type=pathlib.Path, help='Data correspondence table')
+    parser.add_argument("--obs", type=pathlib.Path, required=True, help="data folder")
+    parser.add_argument("--correspond", type=pathlib.Path, required=True, help='Data correspondence table')
     args = parser.parse_args()
 
     if args.dflow_history.is_dir():
