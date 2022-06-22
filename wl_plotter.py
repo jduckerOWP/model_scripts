@@ -482,7 +482,7 @@ def main(args):
 
         # Find first non-constant timeseries in history file
         bstation = station.encode()
-        if not any(bstation in DS.indexes['stations']):
+        if not any(bstation in DS.indexes['stations'] for DS in waterlevels):
             continue
         for DS in waterlevels:
             try:
