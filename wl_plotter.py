@@ -481,8 +481,14 @@ def main(args):
             continue
 
         # Find first non-constant timeseries in history file
+        bstation = station.encode()
+        if not any(bstation in DS.indexes['stations']):
+            continue
         for DS in waterlevels:
-            model = DS.loc[{'stations': station.encode()}]
+            try:
+                model = DS.loc[{'stations': bstation}]
+            except KeyError:
+                continue
             if np.isnan(model.values).all():
                 continue
             if not np.allclose(model[0], model):
