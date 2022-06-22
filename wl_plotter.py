@@ -493,7 +493,7 @@ def main(args):
                 continue
             if not np.allclose(model[0], model):
                 break
-        model = model.drop_vars(['station_x_coordinate', 'station_y_coordinate', 'station_name'])
+        model = model.drop_vars(['station_x_coordinate', 'station_y_coordinate', 'stations'])
         model = model.to_dataframe().rename(columns={"waterlevel": "model"})
 
         T = model.index[model.index >= model.index[0]+twelve]
