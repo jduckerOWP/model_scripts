@@ -480,19 +480,22 @@ def main(args):
             print("Skipping", path, "(data file not found)")
             continue
 
-        # Find first non-constant timeseries in history file
+        # Find first non-constant timeseries in history files
         bstation = station.encode()
-        if not any(bstation in DS.indexes['stations'] for DS in waterlevels):
-            continue
+        model = None
         for DS in waterlevels:
             try:
                 model = DS.loc[{'stations': bstation}]
             except KeyError:
+                model = None
                 continue
-            if np.isnan(model.values).all():
+            if np.isnan(model.values).all() or np.allclose(model[0], model):
+                model = None
                 continue
-            if not np.allclose(model[0], model):
+            else:
                 break
+        if model is None:
+            continue
         model = model.drop_vars(['station_x_coordinate', 'station_y_coordinate', 'stations'])
         model = model.to_dataframe().rename(columns={"waterlevel": "model"})
 
