@@ -604,7 +604,7 @@ def get_options():
     args = parser.parse_args()
 
     if args.dflow_history.is_dir():
-        args.dflow_history = list(args.dflow_history.glob("FlowFM_*_his.nc"))
+        args.dflow_history = list(args.dflow_history.glob("*_his.nc"))
     else:
         args.dflow_history = [args.dflow_history]
 
