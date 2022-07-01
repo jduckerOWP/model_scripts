@@ -413,7 +413,11 @@ def open_csv(filename):
     
     date_label = obs_ds.columns[date_col][0]
     value_label = obs_ds.columns[values_col][0]
-    df = obs_ds.loc[:, [date_label, value_label]].rename(columns={date_label: "date", value_label: "measurement"})
+    if value_label.lower() != "prediction":
+        rname = 'measurement'
+    else:
+        rname = 'prediction'
+    df = obs_ds.loc[:, [date_label, value_label]].rename(columns={date_label: "date", value_label: rname})
     df["date"] = pd.to_datetime(df["date"], infer_datetime_format=True)
     df = df.loc[pd.notna(df["date"])]
     df = df.set_index("date").sort_index().tz_localize(None)
@@ -507,7 +511,8 @@ def main(args):
 
         # Get the observation data
         obs = open_csv(path)
-        obs = obs.rename(columns={'measurement': 'observation'})
+        obs_label = obs.columns[0]
+        obs = obs.rename(columns={obs_label: 'observation'})
 
         # Restrict observation range to model range
         obs = obs.loc[model.index[0]:model.index[-1]+modelfreq]
@@ -541,7 +546,7 @@ def main(args):
         ax = plt.gca()
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d'))
 
-        ax.plot(obs_data, 'r', marker=',', linestyle='-', label="Measured", linewidth=2)
+        ax.plot(obs_data, 'r', marker=',', linestyle='-', label=obs_label.capitalize(), linewidth=2)
         ax.plot(model_data, 'b', marker=',', linestyle='-', label="Model", linewidth=2)
         ax.legend()
         ax.grid()
