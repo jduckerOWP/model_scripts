@@ -26,8 +26,6 @@ import time
 import math
 import argparse
 import datetime
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
 import pathlib
 from dataclasses import dataclass
 from enum import Enum, auto
@@ -40,6 +38,12 @@ try:
     have_pytides = True
 except ImportError:
     have_pytides = False
+
+import matplotlib
+matplotlib.use('agg')
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+
 
 # Turn off SettingWithCopyWarning (we are careful not to do that)
 pd.options.mode.chained_assignment = None
