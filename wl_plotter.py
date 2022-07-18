@@ -550,8 +550,8 @@ def main(args):
         ax = plt.gca()
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d'))
 
-        ax.plot(obs_data, 'r', marker=',', linestyle='-', label=obs_label.capitalize(), linewidth=2)
-        ax.plot(model_data, 'b', marker=',', linestyle='-', label="Model", linewidth=2)
+        ax.plot(d.observed, 'r', marker=',', linestyle='-', label=obs_label.capitalize(), linewidth=2)
+        ax.plot(d.predicted, 'b', marker=',', linestyle='-', label="Model", linewidth=2)
         ax.legend()
         ax.grid()
         ax.set_title(f"Station ID: {d.station_id}", size=20, fontweight='bold')
