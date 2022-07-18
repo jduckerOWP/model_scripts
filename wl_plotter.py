@@ -497,7 +497,7 @@ def main(args):
             except KeyError:
                 model = None
                 continue
-            if np.isnan(model.values).all() or np.allclose(model[0], model):
+            if np.isnan(model.values).all():
                 model = None
                 continue
             else:
