@@ -29,7 +29,7 @@ import datetime
 import pathlib
 from dataclasses import dataclass
 from enum import Enum, auto
-from scipy.stats import pearsonr
+from scipy.stats import pearsonr, ttest_1samp
 
 try:
     from pytides.tide import Tide
@@ -172,12 +172,199 @@ def mean_rmse(Am, An, Pm, Pn):
     return np.sum(np.sqrt(tmp))/len(tmp)
 
 
+def rmse(model, obs):
+    return math.sqrt(np.square(model - obs).mean())
+
+
 def phase_correct(pdiff):
     """Correct phase difference so all readings are in [0, 360]"""
     pdiff[pdiff > 180] = 360 - pdiff[pdiff > 180]
     pdiff[pdiff < -180] = 360 + pdiff[pdiff < -180]
     return pdiff
 
+
+########################################################################
+#
+#   Test for 90% accuracy. Copied from nsem-workflow 2022-08-09
+#
+########################################################################
+
+def test_90_accuracy(timeseries, plotflag=False, direc="", label="model", unit="Value"):
+# Function to perform the 90% accuracy test for FEMA using
+# a paired t-test on the model output and observations.
+
+    obs1 = timeseries.observed
+    mod1 = timeseries.predicted
+    print('In test_90_accuracy:') 
+
+    # Perform a paired t-test
+    m = 0.1
+    alpha = 0.05
+    #print("mean = "+str(np.mean((mod1-obs1)/obs1))+", stdev = "+str(stats.tstd((mod1-obs1)/obs1)))
+    #if np.mean((mod1-obs1)/obs1) > 0:
+    if np.mean(np.abs(mod1-obs1)/np.max(obs1)) > 0:
+        # Alternative hypothesis: mu_drel > 0.1 (right-tailed test)
+        print("Testing Ha: mu_drel > "+str(m))
+        results = ttest_1samp(np.abs(mod1-obs1)/np.maximum(np.max(obs1),0.01), m)
+        #print(results[0],results[1])
+        if (results[0] > 0) & (results[1]/2 < alpha):
+            pvalue1 = results[1]/2
+            print('p-value = '+"{:.5f}".format(pvalue1))
+            print("reject null hypothesis, mean is more than "+str(m))
+            test1 = 0
+        else:
+            if (results[0] > 0):
+                pvalue1 = results[1]/2
+                print('p-value = '+"{:.5f}".format(pvalue1))
+            else:
+                pvalue1 = 1-results[1]/2
+                print('p-value = '+"{:.5f}".format(pvalue1))
+                print("accept null hypothesis")
+                test1 = 1
+    else:
+        # Alternative hypothesis: mu_drel < -0.1 (left-tailed test)
+        print("Testing Ha: mu_drel < "+str(-m))
+        results = ttest_1samp(np.abs(mod1-obs1)/np.maximum(obs1,0.01), -m)
+        #print(results[0],results[1])
+        if (results[0] < 0) & (results[1]/2 < alpha):
+            pvalue1 = results[1]/2
+            print('p-value = '+"{:.5f}".format(pvalue1))
+            print("reject null hypothesis, mean is less than "+str(-m))
+            test1 = 0
+        else:
+            if (results[0] < 0):
+                pvalue1 = results[1]/2
+                print('p-value = '+"{:.5f}".format(pvalue1))
+            else:
+                pvalue1 = 1-results[1]/2
+                print('p-value = '+"{:.5f}".format(pvalue1))         
+                print("accept null hypothesis")   
+                test1 = 1
+         
+    if (test1 == 1):
+        success = True
+        print(" => 90% accuracy criterion is met.")
+    else:
+        success = False
+        print(" => 90% accuracy criterion is NOT met.")
+   #print("Range of rel_d1 = ["+str(min((mod1-obs1)/obs1))+", "+str(max((mod1-obs1)/obs1))+"]")
+   #print("Range of rel_d2 = ["+str(min((mod2-obs2)/obs2))+", "+str(max((mod2-obs2)/obs2))+"]")
+
+    return success, pvalue1
+
+
+def test_90_accuracy_2part(timeseries, plotflag=False, direc="", label="model", unit="Value"):
+# Function to perform the 90% accuracy test for FEMA using
+# a paired t-test on the model output and observations.
+# Data is partitioned into a subset before and after the 
+# storm peak in order to detect errors due to time lag.
+
+    observations = timeseries.observed
+    model = timeseries.predicted
+    # Split the data into segments before and after the storm peak
+    cuttime = observations.idxmax(axis=1)
+    print("Split ts at index of max obs: "+str(cuttime))
+    obs1 = observations[:cuttime]
+    mod1 = model[:cuttime]
+    obs2 = observations[cuttime:]
+    mod2 = model[cuttime:]
+
+    # Perform a paired t-test on the increasing ts segment
+    m = 0.1
+    alpha = 0.05
+    #print("mean = "+str(np.mean((mod1-obs1)/obs1))+", stdev = "+str(stats.tstd((mod1-obs1)/obs1)))
+    if np.mean((mod1-obs1)/obs1) > 0:
+        # Alternative hypothesis: mu_drel > 0.1 (right-tailed test)
+        print("Testing Ha: mu_drel > "+str(m))
+        results = ttest_1samp((mod1-obs1)/np.maximum(obs1,0.01), m)
+        #print(results[0],results[1])
+        if (results[0] > 0) & (results[1]/2 < alpha):
+            pvalue1 = results[1]/2
+            print('p-value = '+"{:.5f}".format(pvalue1))
+            print("reject null hypothesis, mean is more than "+str(m))
+            test1 = 0
+        else:
+            if (results[0] > 0):
+                pvalue1 = results[1]/2
+                print('p-value = '+"{:.5f}".format(pvalue1))
+            else:
+                pvalue1 = 1-results[1]/2
+                print('p-value = '+"{:.5f}".format(pvalue1))
+                print("accept null hypothesis")
+                test1 = 1
+    else:
+        # Alternative hypothesis: mu_drel < -0.1 (left-tailed test)
+        print("Testing Ha: mu_drel < "+str(-m))
+        results = ttest_1samp((mod1-obs1)/np.maximum(obs1,0.01), -m)
+        #print(results[0],results[1])
+        if (results[0] < 0) & (results[1]/2 < alpha):
+            pvalue1 = results[1]/2
+            print('p-value = '+"{:.5f}".format(pvalue1))
+            print("reject null hypothesis, mean is less than "+str(-m))
+            test1 = 0
+        else:
+            if (results[0] < 0):
+                pvalue1 = results[1]/2
+                print('p-value = '+"{:.5f}".format(pvalue1))
+            else:
+                pvalue1 = 1-results[1]/2
+                print('p-value = '+"{:.5f}".format(pvalue1))         
+                print("accept null hypothesis")   
+                test1 = 1
+
+    # Perform a paired t-test on the decreasing ts segment  
+    #print("mean = "+str(np.mean((mod2-obs2)/obs2))+", stdev = "+str(stats.tstd((mod2-obs2)/obs2)))
+    if np.mean((mod2-obs2)/obs2) > 0:
+        # Alternative hypothesis: mu_drel > 0.1 (right-tailed test)
+        print("Testing Ha: mu_drel > "+str(m))
+        results = ttest_1samp((mod2-obs2)/np.maximum(obs2,0.01), m)
+        #print(results[0],results[1])
+        if (results[0] > 0) & (results[1]/2 < alpha):
+            pvalue2 = results[1]/2
+            print('p-value = '+"{:.5f}".format(pvalue2))
+            print("reject null hypothesis, mean is more than "+str(m))
+            test2 = 0
+        else:
+            if (results[0] > 0):
+                pvalue2 = results[1]/2
+                print('p-value = '+"{:.5f}".format(pvalue2))
+            else:
+                pvalue2 = 1-results[1]/2
+                print('p-value = '+"{:.5f}".format(pvalue2))
+                print("accept null hypothesis")
+                test2 = 1
+    else:
+        # Alternative hypothesis: mu_drel < -0.1 (left-tailed test)
+        print("Testing Ha: mu_drel < "+str(-m))
+        results = ttest_1samp((mod2-obs2)/np.maximum(obs2,0.01), -m)
+        #print(results[0],results[1])
+        if (results[0] < 0) & (results[1]/2 < alpha):
+            pvalue2 = results[1]/2
+            print('p-value = '+"{:.5f}".format(pvalue2))
+            print("reject null hypothesis, mean is less than "+str(-m))
+            test2 = 0
+        else:
+            if (results[0] < 0):
+                pvalue2 = results[1]/2
+                print('p-value = '+"{:.5f}".format(pvalue2))
+            else:
+                pvalue2 = 1-results[1]/2
+                print('p-value = '+"{:.5f}".format(pvalue2))         
+                print("accept null hypothesis")   
+                test2 = 1
+            
+    if (test1 == 1 and test2 == 1):
+        success = True
+        print(" => 90% accuracy criterion is met.")
+    else:
+        success = False
+        print(" => 90% accuracy criterion is NOT met.")
+    #print("Range of rel_d1 = ["+str(min((mod1-obs1)/obs1))+", "+str(max((mod1-obs1)/obs1))+"]")
+    #print("Range of rel_d2 = ["+str(min((mod2-obs2)/obs2))+", "+str(max((mod2-obs2)/obs2))+"]")
+
+    return success, pvalue1, pvalue2
+
+#######################################################################################
 
 def tidal_analysis(d):
     """Solve for tidal constituents.
@@ -562,8 +749,12 @@ def main(args):
             ax.set_ylabel("Water level (m)", size=15)
 
         ax.set_xlabel(f"Date [{d.data.index[0].year}]", size=15)
+
+        # Perform 90% accuracy test
+        test1 = test_90_accuracy(d)
+        test2 = test_90_accuracy_2part(d)
         measures = (d.bias(), d.corr()[0], d.rmse(), d.nrmse(), d.skill())
-        summary.append((d.station_id,) + measures)
+        summary.append((d.station_id,) + measures + test1 + test2)
         # add timeseries statistics
         measures = tuple(round(x, 3) for x in measures)
         stat_str = f"Bias: {measures[0]}\nCorr: {measures[1]}\nRMSE: {measures[2]}\nNRMSE: {measures[3]}\nSkill: {measures[4]}"
@@ -586,7 +777,7 @@ def main(args):
         wl.close()
 
     #Filter summary and tidal_summary (if necessary) by skill
-    summary_df = pd.DataFrame(summary, columns=['station_id', 'bias', 'corr', 'rmse', 'nrmse', 'skill'])
+    summary_df = pd.DataFrame(summary, columns=['station_id', 'bias', 'corr', 'rmse', 'nrmse', 'skill', '90_test1', 'pvalue', '90_test2', 'pval1', 'pval2'])
     summary_df["idx"] = list(range(len(summary)))
     #summary_df = summary_df.groupby('station_id').apply(lambda x: x.iloc[x.skill.argmax()])
     sel_idx = set(summary_df["idx"])
