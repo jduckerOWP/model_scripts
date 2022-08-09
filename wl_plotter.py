@@ -262,7 +262,7 @@ def test_90_accuracy_2part(timeseries, plotflag=False, direc="", label="model", 
     observations = timeseries.observed
     model = timeseries.predicted
     # Split the data into segments before and after the storm peak
-    cuttime = observations.idxmax(axis=1)
+    cuttime = observations.idxmax()
     print("Split ts at index of max obs: "+str(cuttime))
     obs1 = observations[:cuttime]
     mod1 = model[:cuttime]
