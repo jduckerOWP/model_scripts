@@ -211,7 +211,7 @@ def test_90_accuracy(timeseries, plotflag=False, direc="", label="model", unit="
             pvalue1 = results[1]/2
             print('p-value =', "{:.5f}".format(pvalue1))
             print("reject null hypothesis, mean is more than", m)
-            test1 = 0
+            success = False
         else:
             if (results[0] > 0):
                 pvalue1 = results[1]/2
@@ -220,7 +220,7 @@ def test_90_accuracy(timeseries, plotflag=False, direc="", label="model", unit="
                 pvalue1 = 1-results[1]/2
                 print('p-value =', "{:.5f}".format(pvalue1))
             print("accept null hypothesis")
-            test1 = 1
+            success = True
     else:
         # Alternative hypothesis: mu_drel < -0.1 (left-tailed test)
         print("Testing Ha: mu_drel < ", -m)
@@ -239,13 +239,11 @@ def test_90_accuracy(timeseries, plotflag=False, direc="", label="model", unit="
                 pvalue1 = 1-results[1]/2
                 print('p-value = '+"{:.5f}".format(pvalue1))         
             print("accept null hypothesis")   
-            test1 = 1
+            success = True
          
-    if (test1 == 1):
-        success = True
+    if success:
         print(" => 90% accuracy criterion is met.")
     else:
-        success = False
         print(" => 90% accuracy criterion is NOT met.")
    #print("Range of rel_d1 = ["+str(min((mod1-obs1)/obs1))+", "+str(max((mod1-obs1)/obs1))+"]")
    #print("Range of rel_d2 = ["+str(min((mod2-obs2)/obs2))+", "+str(max((mod2-obs2)/obs2))+"]")
