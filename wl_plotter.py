@@ -209,21 +209,21 @@ def test_90_accuracy(timeseries, plotflag=False, direc="", label="model", unit="
         #print(results[0],results[1])
         if (results[0] > 0) & (results[1]/2 < alpha):
             pvalue1 = results[1]/2
-            print('p-value = '+"{:.5f}".format(pvalue1))
-            print("reject null hypothesis, mean is more than "+str(m))
+            print('p-value =', "{:.5f}".format(pvalue1))
+            print("reject null hypothesis, mean is more than", m)
             test1 = 0
         else:
             if (results[0] > 0):
                 pvalue1 = results[1]/2
-                print('p-value = '+"{:.5f}".format(pvalue1))
+                print('p-value =', "{:.5f}".format(pvalue1))
             else:
                 pvalue1 = 1-results[1]/2
-                print('p-value = '+"{:.5f}".format(pvalue1))
-                print("accept null hypothesis")
-                test1 = 1
+                print('p-value =', "{:.5f}".format(pvalue1))
+            print("accept null hypothesis")
+            test1 = 1
     else:
         # Alternative hypothesis: mu_drel < -0.1 (left-tailed test)
-        print("Testing Ha: mu_drel < "+str(-m))
+        print("Testing Ha: mu_drel < ", -m)
         results = ttest_1samp(np.abs(mod1-obs1)/np.maximum(obs1,0.01), -m)
         #print(results[0],results[1])
         if (results[0] < 0) & (results[1]/2 < alpha):
@@ -238,8 +238,8 @@ def test_90_accuracy(timeseries, plotflag=False, direc="", label="model", unit="
             else:
                 pvalue1 = 1-results[1]/2
                 print('p-value = '+"{:.5f}".format(pvalue1))         
-                print("accept null hypothesis")   
-                test1 = 1
+            print("accept null hypothesis")   
+            test1 = 1
          
     if (test1 == 1):
         success = True
