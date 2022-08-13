@@ -202,10 +202,11 @@ def test_90_accuracy(timeseries, plotflag=False, direc="", label="model", unit="
     alpha = 0.05
     #print("mean = "+str(np.mean((mod1-obs1)/obs1))+", stdev = "+str(stats.tstd((mod1-obs1)/obs1)))
     #if np.mean((mod1-obs1)/obs1) > 0:
-    if np.mean(np.abs(mod1-obs1)/np.max(obs1)) > 0:
+    ttest_data = (mod1-obs1).abs()/max(obs1.max(), 0.01)
+    if ((mod1-obs1).abs()/obs1.max()).mean() > 0:
         # Alternative hypothesis: mu_drel > 0.1 (right-tailed test)
         print("Testing Ha: mu_drel > "+str(m))
-        results = ttest_1samp(np.abs(mod1-obs1)/np.maximum(np.max(obs1),0.01), m)
+        results = ttest_1samp(ttest_data, m)
         #print(results[0],results[1])
         if (results[0] > 0) & (results[1]/2 < alpha):
             pvalue1 = results[1]/2
@@ -230,7 +231,7 @@ def test_90_accuracy(timeseries, plotflag=False, direc="", label="model", unit="
             pvalue1 = results[1]/2
             print('p-value = '+"{:.5f}".format(pvalue1))
             print("reject null hypothesis, mean is less than "+str(-m))
-            test1 = 0
+            success = False
         else:
             if (results[0] < 0):
                 pvalue1 = results[1]/2
@@ -616,6 +617,9 @@ def main(args):
             continue                
         
         d = TSData(metadata['Datum'], station, joined, bias_correct=args.bias_correct)
+        
+        # Perform 90% accuracy test
+        test1 = test_90_accuracy(d)
 
         print("writing and plotting", d.station_id)
         d.data.to_csv(args.output/f'{d.station_id}.csv')
@@ -627,7 +631,11 @@ def main(args):
         ax.plot(d.predicted, 'b', marker=',', linestyle='-', label="Model", linewidth=2)
         ax.legend()
         ax.grid()
-        ax.set_title(f"Station ID: {d.station_id}", size=20, fontweight='bold')
+        if not test1[0]:
+            color = 'r'
+        else:
+            color = 'k'
+        ax.set_title(f"Station ID: {d.station_id}", size=20, fontweight='bold', color=color)
 
         if d.datum:
             ax.set_ylabel(f"Water level (m {d.datum})", size=15)
@@ -636,8 +644,6 @@ def main(args):
 
         ax.set_xlabel(f"Date [{d.data.index[0].year}]", size=15)
 
-        # Perform 90% accuracy test
-        test1 = test_90_accuracy(d)
         measures = (d.bias(), d.corr()[0], d.rmse(), d.nrmse(), d.skill())
         summary.append((d.station_id,) + measures + test1)
         # add timeseries statistics
