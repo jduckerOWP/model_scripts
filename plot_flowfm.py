@@ -88,6 +88,26 @@ def detect_model_labels(models):
             return rv
 
 
+def read_correspondence_table(path, storms):
+    correspond = pd.read_csv(path, dtype={'GageID': 'string'},
+                            converters={'ProcessedCSVLoc': pathlib.Path})
+    correspond['GageID'] = correspond['GageID'].str.strip()
+    correspond = correspond.set_index('GageID').sort_index()
+
+    if "Storm" in correspond.columns:
+        # Filter by storm before uniqueness check
+        storm_mask = correspond["Storm"].isin(storms)
+        correspond = correspond.loc[storm_mask]
+    if not correspond.index.is_unique:
+        print(correspond.index[correspond.index.duplicated()])
+        raise RuntimeError("GageID needs to be unique")
+    if "Datum" in correspond.columns:
+        correspond.loc[pd.isna(correspond["Datum"]), "Datum"] = None
+    else:
+        correspond['Datum'] = None
+    return correspond
+
+
 def main(args):
     filehandles = []
     history_files = {}
@@ -105,18 +125,7 @@ def main(args):
 
     # load the correspondence table
     if args.correspond:
-        correspond = pd.read_csv(args.correspond, dtype={'GageID': 'string'},
-                                converters={'ProcessedCSVLoc': pathlib.Path})
-        correspond['GageID'] = correspond['GageID'].str.strip()
-        correspond = correspond.set_index('GageID').sort_index()
-
-        # Filter by storm before uniqueness check
-        storm_mask = correspond["Storm"].isin(args.storm)
-        correspond = correspond.loc[storm_mask]
-        if not correspond.index.is_unique:
-            print(correspond.index[correspond.index.duplicated()])
-            raise RuntimeError("GageID needs to be unique")
-        correspond.loc[pd.isna(correspond["Datum"]), "Datum"] = None
+        correspond = read_correspondence_table(args.correspond, args.storm)
 
     _model = next(iter(history_files.values()))
     stations = _model.stations.values
