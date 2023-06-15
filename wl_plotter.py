@@ -22,8 +22,10 @@ External Dependencies:
 import xarray as xr
 import pandas as pd
 import numpy as np
+import cftime
 import time
 import math
+import json
 import argparse
 import datetime
 import pathlib
@@ -529,15 +531,49 @@ def open_his_waterlevel(fn):
         waterlevel = ds.waterlevel
         waterlevel = waterlevel.set_index(stations='station_name').sortby('stations')
         return waterlevel
+    
+def open_schism_elevation(fn):
+    def convert_schism_time(times):
+        base_date = times.base_date.split()
+        rv = cftime.num2date(times.values, f"seconds since {'-'.join(base_date[:3])}")
+        return rv.astype('datetime64[ns]')
 
+    with xr.open_dataset(fn) as ds:
+        elevation = ds.elevation
+        elevation["time"] = convert_schism_time(elevation["time"])  
+        return elevation
+
+def select_schism_nodes(data, indexer):
+    # Indexer will be a string
+    indexer = json.loads(indexer)
+    _elevation = data[:, indexer]
+    if len(indexer) > 1:
+        _elevation = _elevation.mean(axis=1)
+
+    model = _elevation.to_dataframe().rename(columns={'elevation': 'model'})
+    return model
+
+def select_dflow_sites(data, indexer):
+    index = data.station_name.str.strip().astype(str).values
+    waterlevel = data[:, index == indexer]
+
+    model = model.drop_vars(['station_x_coordinate', 'station_y_coordinate', 'stations'])
+    model = model.to_dataframe().rename(columns={"waterlevel": "model"})
+    return waterlevel
     
 def main(args):
     twelve = datetime.timedelta(hours=12)
     summary = []
     tidal_summary = []
 
+    # Correspondence table has the following columns
+    # GageID: gages to process
+    # ProcessedCSVLoc: Processed csv measurement data
+    # Storm: storm identifier
+    # Datum: datum identifier
     correspond = pd.read_csv(args.correspond, dtype={'GageID': 'string'},
                             converters={'ProcessedCSVLoc': pathlib.Path})
+    
     correspond['GageID'] = correspond['GageID'].str.strip()
     correspond = correspond.set_index('GageID').sort_index()
 
@@ -551,7 +587,11 @@ def main(args):
 
     args.output.mkdir(parents=True, exist_ok=True)
 
-    waterlevels = [open_his_waterlevel(fn) for fn in args.dflow_history]
+    if args.type == "schism":
+        waterlevels = open_schism_elevation(args.dflow_history)
+    else:
+        waterlevels = open_his_waterlevel(args.dflow_history)
+        
     for station in correspond.index:
         metadata = correspond.loc[station]
         fn = metadata["ProcessedCSVLoc"]
@@ -562,24 +602,14 @@ def main(args):
             print("Skipping", path, "(data file not found)")
             continue
 
-        # Find first non-constant timeseries in history files
-        bstation = station.encode()
-        model = None
-        for DS in waterlevels:
-            try:
-                model = DS.loc[{'stations': bstation}]
-            except KeyError:
-                model = None
-                continue
-            if np.isnan(model.values).all():
-                model = None
-                continue
-            else:
-                break
-        if model is None:
+        # Select station from waterlevel file
+        if args.type == "schism":
+            model = select_schism_nodes(waterlevels, station)
+        else:
+            model = select_dflow_sites(waterlevels, station.encode())
+
+        if np.isnan(model.values).all():
             continue
-        model = model.drop_vars(['station_x_coordinate', 'station_y_coordinate', 'stations'])
-        model = model.to_dataframe().rename(columns={"waterlevel": "model"})
 
         T = model.index[model.index >= model.index[0]+twelve]
         # drop first twelve hours of model to remove warmup effects
@@ -686,6 +716,7 @@ def get_options():
     parser = argparse.ArgumentParser()
     
     parser.add_argument('dflow_history', type=pathlib.Path, help='DFlow history NetCDF')
+    parser.add_argument('--type', default='dflow', help="Model type")
     parser.add_argument('--output', default=pathlib.Path(), type=pathlib.Path, help="Output directory")
     parser.add_argument('-t', '--tide', action='store_true', default=False, help='Solve tidal for tidal constituents')
     parser.add_argument('-b', '--bias-correct', action='store_true', help="Bias correct all stations")
@@ -695,9 +726,9 @@ def get_options():
     args = parser.parse_args()
 
     if args.dflow_history.is_dir():
-        args.dflow_history = list(args.dflow_history.glob("*_his.nc"))
+        args.dflow_history = next(args.dflow_history.glob("*_his.nc"))
     else:
-        args.dflow_history = [args.dflow_history]
+        args.dflow_history = args.dflow_history
 
     if not have_pytides and args.tide:
         raise RuntimeError("PyTides needs to be installed for tidal constituent solving")
