@@ -12,9 +12,9 @@ import random
 import asyncio
 import concurrent.futures
 
-BASE_URL = "http://waterservices.usgs.gov/nwis/iv"
+BASE_URL = "https://nwis.waterservices.usgs.gov/nwis/iv/"
 HEADERS = {"Accept-Encoding": "gzip, compress"}
-PARAMS = {"format": "json", "startDT": "2003-01-01" , "parameterCd": [], "siteStatus": "all"}
+PARAMS = {"format": "json", "startDT": "1970-01-01", "parameterCd": [], "siteStatus": "all"}
 
 #COLUMN_ORDER = ['siteCode', 'streamflow (ft^3/s)', 'sf qualifiers', 'gage height (ft)', 'gh qualifiers', 'longitude', 'latitude']
 #COLUMN_ORDER = ['siteCode', 'Precip Total (in)', 'pt qualifiers', 'Physical Precip Total (in/wk)', 'ppr qualifiers', 'longitude', 'latitude']
@@ -24,9 +24,10 @@ VAR_CODES = {'00060': 'streamflow (ft^3/s)', '00065': 'gage height (ft)',
              '00045': 'Precip Total (in)', 
              '00046': 'Physical Precip Total (in/wk)',
              '62620': "Elevation ocean/est (ft NAVD88)",
-             '62615': "Water Level (ft)"}
+             '62615': "Water Level (ft)",
+             '62614': "Water surface elevation above NGVD1929 (ft)"}
 ABBREV = {'00060': 'sf', '00065': 'gh',
-          '00045': 'pt', '00046': 'ppr', '62620': 'elv', '62615': 'wl'}
+          '00045': 'pt', '00046': 'ppr', '62620': 'elv', '62615': 'wl', '62614': 'wse'}
 GROUP_SIZE = 1
 
 
@@ -106,17 +107,11 @@ def groupby_sitecode_join(dfs):
 
 def process_request(result, output):
     if result.ok:
-        #print("Processing a result")
+        print(result.url)
         dfs = get_values(result.json())
         if dfs:
             DF = groupby_sitecode_join(dfs)
-            print("Processing data...", len(DF))
-            #expected_cols = set()
-            #for p in PARAMS['parameterCd']:
-            #    expected_cols.update((VAR_CODES[p], f"{ABBREV[p]} qualifiers"))
-            #missing_cols = list(expected_cols.difference(DF.columns))
-            #if missing_cols:
-            #    DF[missing_cols] = pd.NA
+            print("Processing data...", len(DF), "records")
             DF = DF.sort_index()
             for code, df in DF.groupby('siteCode'):
                 fname = output / f"US{code}.csv.xz"
@@ -128,7 +123,7 @@ def process_request(result, output):
                     fname.unlink()
                     break
             else:
-                print("Finished processing", len(DF), "data points")
+                print("Finished processing", len(DF), "records")
 
 def make_request2(params):
     print("Requesting", params['sites'].count(',') + 1, "sites")
@@ -141,7 +136,8 @@ def request_task(params, output):
 
 async def download_data(sites, output):
     tasks = []
-    with concurrent.futures.ProcessPoolExecutor(max_workers=4) as pool:
+    completed = 0
+    with concurrent.futures.ProcessPoolExecutor(max_workers=10) as pool:
         for s in grouper(sites, GROUP_SIZE):
             sitecodes = list(s)
             params = PARAMS.copy()
@@ -152,6 +148,9 @@ async def download_data(sites, output):
         for t in concurrent.futures.as_completed(tasks):
             if exc := t.exception():
                 raise exc
+            else:
+                completed += 1
+            print("Completed", completed, "of", len(tasks), f"{round(100*(completed/len(tasks)), 2)}%")
         #waited_tasks = concurrent.futures.wait(tasks, return_when=concurrent.futures.FIRST_EXCEPTION)
         
         print("Done awaiting futures")
@@ -175,6 +174,7 @@ if __name__ == "__main__":
     sites = []
 
     # Check if args.output exists. Create if not
+    args.output = args.output.resolve()
     if not args.output.exists():
         args.output.mkdir(parents=True)
         
@@ -185,7 +185,7 @@ if __name__ == "__main__":
         for L in map(str.strip, fi):
             if L.startswith('#'):
                 continue
-            if L.isnumeric() and f"{L}.csv.xz" not in existing:
+            if f"US{L}.csv.xz" not in existing:
                 sites.append(L)
     print("Read", len(sites), "sites from", args.sites)
     random.shuffle(sites)
