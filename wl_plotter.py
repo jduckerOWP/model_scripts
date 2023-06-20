@@ -589,8 +589,10 @@ def main(args):
 
     if args.type == "schism":
         waterlevels = open_schism_elevation(args.dflow_history)
+        mlabel = "SCHISM"
     else:
         waterlevels = open_his_waterlevel(args.dflow_history)
+        mlabel = "DFlow"
         
     for station in correspond.index:
         metadata = correspond.loc[station]
@@ -604,7 +606,8 @@ def main(args):
 
         # Select station from waterlevel file
         if args.type == "schism":
-            model = select_schism_nodes(waterlevels, station)
+            nodes = metadata['Nodes']
+            model = select_schism_nodes(waterlevels, nodes)
         else:
             model = select_dflow_sites(waterlevels, station.encode())
 
@@ -649,7 +652,7 @@ def main(args):
         d = TSData(metadata['Datum'], station, joined, bias_correct=args.bias_correct)
         
         # Perform 90% accuracy test
-        test1 = test_90_accuracy(d)
+        #test1 = test_90_accuracy(d)
 
         print("writing and plotting", d.station_id)
         d.data.to_csv(args.output/f'{d.station_id}.csv')
@@ -658,13 +661,14 @@ def main(args):
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d'))
 
         ax.plot(d.observed, 'r', marker=',', linestyle='-', label=obs_label.capitalize(), linewidth=2)
-        ax.plot(d.predicted, 'b', marker=',', linestyle='-', label="Model", linewidth=2)
+        ax.plot(d.predicted, 'b', marker=',', linestyle='-', label=mlabel, linewidth=2)
         ax.legend()
         ax.grid()
-        if not test1[0]:
-            color = 'r'
-        else:
-            color = 'k'
+        # if not test1[0]:
+        #     color = 'r'
+        # else:
+        #     color = 'k'
+        color = 'k'
         ax.set_title(f"Station ID: {d.station_id}", size=20, fontweight='bold', color=color)
 
         if d.datum:
@@ -675,7 +679,7 @@ def main(args):
         ax.set_xlabel(f"Date [{d.data.index[0].year}]", size=15)
 
         measures = (d.bias(), d.corr()[0], d.rmse(), d.nrmse(), d.skill())
-        summary.append((d.station_id,) + measures + test1)
+        #summary.append((d.station_id,) + measures + test1)
         # add timeseries statistics
         measures = tuple(round(x, 3) for x in measures)
         stat_str = f"Bias: {measures[0]}\nCorr: {measures[1]}\nRMSE: {measures[2]}\nNRMSE: {measures[3]}\nSkill: {measures[4]}"
