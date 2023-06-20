@@ -491,30 +491,39 @@ def select_dflow_sites(data, indexer):
     model = model.to_dataframe().rename(columns={"waterlevel": "model"})
     return waterlevel
     
-def main(args):
-    twelve = datetime.timedelta(hours=12)
-    summary = []
-    tidal_summary = []
 
+def read_correspondence_table(path, storms):
     # Correspondence table has the following columns
     # GageID: gages to process
     # Nodes [optional]: SCHSIM nodes to select for GageID
     # ProcessedCSVLoc: Processed csv measurement data
     # Storm: storm identifier
     # Datum: datum identifier
-    correspond = pd.read_csv(args.correspond, dtype={'GageID': 'string'},
+    correspond = pd.read_csv(path, dtype={'GageID': 'string'},
                             converters={'ProcessedCSVLoc': pathlib.Path})
-    
     correspond['GageID'] = correspond['GageID'].str.strip()
     correspond = correspond.set_index('GageID').sort_index()
 
-    # Filter by storm before uniqueness check
-    storm_mask = correspond["Storm"].isin(args.storm)
-    correspond = correspond.loc[storm_mask]
+    if "Storm" in correspond.columns:
+        # Filter by storm before uniqueness check
+        storm_mask = correspond["Storm"].isin(storms)
+        correspond = correspond.loc[storm_mask]
     if not correspond.index.is_unique:
         print(correspond.index[correspond.index.duplicated()])
         raise RuntimeError("GageID needs to be unique")
-    correspond.loc[pd.isna(correspond["Datum"]), "Datum"] = None
+    if "Datum" in correspond.columns:
+        correspond.loc[pd.isna(correspond["Datum"]), "Datum"] = None
+    else:
+        correspond['Datum'] = None
+    return correspond
+
+
+def main(args):
+    twelve = datetime.timedelta(hours=12)
+    summary = []
+    tidal_summary = []
+
+    correspond = read_correspondence_table(args.correspond, args.storm)
 
     args.output.mkdir(parents=True, exist_ok=True)
 
