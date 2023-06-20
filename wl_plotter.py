@@ -498,6 +498,7 @@ def main(args):
 
     # Correspondence table has the following columns
     # GageID: gages to process
+    # Nodes [optional]: SCHSIM nodes to select for GageID
     # ProcessedCSVLoc: Processed csv measurement data
     # Storm: storm identifier
     # Datum: datum identifier
