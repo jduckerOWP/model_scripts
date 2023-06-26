@@ -3,6 +3,8 @@ import pathlib
 import numpy as np
 import xarray as xr
 import pandas as pd
+import cftime
+import json
 
 import matplotlib
 matplotlib.use('agg')
@@ -82,13 +84,71 @@ def plot_models(output_dir, models, obs=None, datum=None):
 
 def detect_model_labels(models):
     while True:
-        models = tuple(m.parent for m in models)
-        rv = tuple(m.name for m in models)
+        rv = tuple(m.parent if m.is_file() else m.name for m in models)
         if len(set(rv)) == len(rv):
             return rv
+        models = tuple(m.parent for m in models)
+
+def align_times(t1, t2):
+    """Perform an inner join on t1 and t2.
+    
+    Returns a tuple of indices that can be used to select the matching elements
+    """
+    a = []
+    b = []
+    lut = dict(zip(t1, range(len(t1))))
+    for _i2, _t2 in enumerate(t2):
+        if _t2 in lut:
+            a.append(lut[_t2])
+            b.append(_i2)
+    return a, b
+
+
+def select_schism_nodes(data, indexer, time_indexer=None):
+    if time_indexer is None:
+        time_indexer = slice(None)
+    _elevation = data[time_indexer, indexer].mean(axis=1)
+    return _elevation
+
+
+def select_dflow_sites(data, indexer, time_indexer=None):
+    index = data.stations.str.strip().astype(str).values
+
+    if time_indexer is None:
+        time_indexer = slice(None)
+    waterlevel = data[time_indexer, index == indexer]
+    return waterlevel
+        
+
+def is_dflow(path):
+    try:
+        next(path.glob("FlowFM_*_his.nc"))
+        return True
+    except StopIteration:
+        return False
+
+
+def is_schism(path):
+    try:
+        next(path.glob("out2d*.nc"))
+        return True
+    except StopIteration:
+        return False
+    
+
+def convert_schism_time(times):
+    base_date = times.base_date.split()
+    rv = cftime.num2date(times.values, f"seconds since {'-'.join(base_date[:3])}")
+    return rv.astype('datetime64[ns]')
 
 
 def read_correspondence_table(path, storms):
+    # Correspondence table has the following columns
+    # GageID: gages to process
+    # Nodes [optional]: SCHSIM nodes to select for GageID
+    # ProcessedCSVLoc: Processed csv measurement data
+    # Storm: storm identifier
+    # Datum: datum identifier
     correspond = pd.read_csv(path, dtype={'GageID': 'string'},
                             converters={'ProcessedCSVLoc': pathlib.Path})
     correspond['GageID'] = correspond['GageID'].str.strip()
@@ -111,48 +171,67 @@ def read_correspondence_table(path, storms):
 def main(args):
     filehandles = []
     history_files = {}
+    stimes = dtimes = None
     for label, d in zip(detect_model_labels(args.model), args.model):
-        hfile = d / "FlowFM_0000_his.nc"
-        if hfile.exists():
+        if is_dflow(d):
+            hfile = d/"FlowFM_0000_his.nc"
             fh = xr.open_dataset(hfile)
             filehandles.append(fh)
             fh['station_name'] = fh.station_name.str.strip()
             wl = fh.waterlevel
             wl = wl.set_index(stations='station_name').sortby('stations')
-            history_files[label] = wl
+            history_files[(1, label)] = wl
+            dtimes = fh.time.values
+        elif is_schism(d):
+            outs = list(d.glob("out2d*.nc"))
+            if len(outs) > 1:
+                fh = xr.open_mfdataset(outs)
+            else:
+                fh = xr.open_dataset(outs[0])
+            filehandles.append(fh)
+            stimes = convert_schism_time(fh['time'])
+            fh['time'] = stimes
+            wl = fh.elevation
+            history_files[(2, label)] = wl
         else:
-            raise FileNotFoundError(f"Cannot find {hfile}")
+            raise RuntimeError(f"Unknown model type {d}")
+
+    if stimes is not None and dtimes is not None:
+        stime_idx, dtime_idx = align_times(stimes, dtimes)
+    else:
+        stime_idx = dtime_idx = slice(None)
 
     # load the correspondence table
-    if args.correspond:
-        correspond = read_correspondence_table(args.correspond, args.storm)
+    correspond = read_correspondence_table(args.correspond, args.storm)
 
-    _model = next(iter(history_files.values()))
-    stations = _model.stations.values
-    for station in stations:
-        st = station.decode()
+    breakpoint()
+    stations = correspond.index
+    for st in stations:
         print("Processing", st)
-        if args.correspond and st in correspond.index:
-            metadata = correspond.loc[st]
-            obspath = metadata["ProcessedCSVLoc"]
-            try:
-                obsdata = open_csv(args.obs.joinpath(obspath))
-                datum = metadata["Datum"]
-            except FileNotFoundError:
-                obsdata = None
-                datum = None
-        else:
+        metadata = correspond.loc[st]
+        obspath = metadata["ProcessedCSVLoc"]
+        try:
+            obsdata = open_csv(args.obs.joinpath(obspath))
+            datum = metadata["Datum"]
+        except FileNotFoundError:
             obsdata = None
             datum = None
 
         model_data = {}
-        for f, d in history_files.items():
-            data = d.loc[:, station]
-            if data.ndim > 1:
+        for (t, f), d in history_files.items():
+            if t == 1:
+                # Dflow file
+                data = select_dflow_sites(d, st, time_indexer=dtime_idx)
+            elif t == 2:
+                # SCHISM file
+                data = select_schism_nodes(d, json.loads(metadata.loc['Nodes']), time_indexer=stime_idx)
+                
+            if data.squeeze().ndim > 1:
                 print("Skipping station because of duplicate data:", st)
                 break
             model_data[f] = data
         else:
+            breakpoint()
             plot_models(args.output, model_data, obs=obsdata, datum=datum)
 
     # Release resources
@@ -167,7 +246,7 @@ def get_options():
 
     parser.add_argument("-o", "--output", type=pathlib.Path, help="output folder")
     parser.add_argument("--obs", type=pathlib.Path, help="data folder")
-    parser.add_argument("--correspond", type=pathlib.Path, help='Data correspondence table')
+    parser.add_argument("--correspond", type=pathlib.Path, required=True, help='Data correspondence table')
     parser.add_argument("model", nargs='+', type=pathlib.Path, help="model folders")
     parser.add_argument("-s", "--storm", default=["Any"], action="append", help="Storm filter")
     args = parser.parse_args()
