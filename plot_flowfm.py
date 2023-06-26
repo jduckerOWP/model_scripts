@@ -204,7 +204,6 @@ def main(args):
     # load the correspondence table
     correspond = read_correspondence_table(args.correspond, args.storm)
 
-    breakpoint()
     stations = correspond.index
     for st in stations:
         print("Processing", st)
@@ -231,7 +230,6 @@ def main(args):
                 break
             model_data[f] = data
         else:
-            breakpoint()
             plot_models(args.output, model_data, obs=obsdata, datum=datum)
 
     # Release resources
