@@ -9,4 +9,6 @@ dependencies:
   - pandas>=1.4
   - scipy>=1.6
   - matplotlib>=3.3
+  - cftime
+  - netcdf4>=1.6.0
 
