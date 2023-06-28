@@ -456,7 +456,7 @@ def maxlim(model, obs):
 
 
 def open_his_waterlevel(fn):
-    with xr.open_dataset(fn) as ds:
+    with xr.open_mfdataset(fn) as ds:
         ds['station_name'] = ds.station_name.str.strip()
         waterlevel = ds.waterlevel
         waterlevel = waterlevel.set_index(stations='station_name').sortby('stations')
@@ -468,7 +468,7 @@ def open_schism_elevation(fn):
         rv = cftime.num2date(times.values, f"seconds since {'-'.join(base_date[:3])}")
         return rv.astype('datetime64[ns]')
 
-    with xr.open_dataset(fn) as ds:
+    with xr.open_mfdataset(fn) as ds:
         elevation = ds.elevation
         elevation["time"] = convert_schism_time(elevation["time"])  
         return elevation
@@ -674,8 +674,10 @@ def get_options():
     else:
         if args.model.match("FlowFM_*_his.nc"):
             args.model_type = "dflow"
+            args.model = [args.model]
         elif args.model.match("out2d*.nc"):
             args.model_type = "schism"
+            args.model = [args.model]
         else:
             raise RuntimeError("Unknown filename pattern for model")
 
