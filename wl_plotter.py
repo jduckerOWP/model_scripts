@@ -477,8 +477,7 @@ def select_schism_nodes(data, indexer):
     # Indexer will be a string
     indexer = json.loads(indexer)
     _elevation = data[:, indexer]
-    if len(indexer) > 1:
-        _elevation = _elevation.mean(axis=1)
+    _elevation = _elevation.mean(axis=1)
 
     model = _elevation.to_dataframe().rename(columns={'elevation': 'model'})
     return model
@@ -553,7 +552,7 @@ def main(args):
 
         if np.isnan(model.values).all():
             continue
-
+        
         T = model.index[model.index >= model.index[0]+twelve]
         # drop first twelve hours of model to remove warmup effects
         model = model.loc[T]
