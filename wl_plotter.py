@@ -527,11 +527,11 @@ def main(args):
 
     args.output.mkdir(parents=True, exist_ok=True)
 
-    if args.type == "schism":
-        waterlevels = open_schism_elevation(args.dflow_history)
+    if args.model_type == "schism":
+        waterlevels = open_schism_elevation(args.model)
         mlabel = "SCHISM"
-    else:
-        waterlevels = open_his_waterlevel(args.dflow_history)
+    elif args.model_type == "dflow":
+        waterlevels = open_his_waterlevel(args.model)
         mlabel = "DFlow"
         
     for station in correspond.index:
@@ -545,7 +545,7 @@ def main(args):
             continue
 
         # Select station from waterlevel file
-        if args.type == "schism":
+        if args.model_type == "schism":
             nodes = metadata['Nodes']
             model = select_schism_nodes(waterlevels, nodes)
         else:
@@ -650,8 +650,7 @@ def main(args):
 def get_options():
     parser = argparse.ArgumentParser()
     
-    parser.add_argument('dflow_history', type=pathlib.Path, help='DFlow history NetCDF')
-    parser.add_argument('--type', default='dflow', help="Model type")
+    parser.add_argument('model', type=pathlib.Path, help='Model timeseries file/directory')
     parser.add_argument('--output', default=pathlib.Path(), type=pathlib.Path, help="Output directory")
     parser.add_argument('-t', '--tide', action='store_true', default=False, help='Solve tidal for tidal constituents')
     parser.add_argument('-b', '--bias-correct', action='store_true', help="Bias correct all stations")
@@ -660,10 +659,25 @@ def get_options():
     parser.add_argument("--correspond", type=pathlib.Path, required=True, help='Data correspondence table')
     args = parser.parse_args()
 
-    if args.dflow_history.is_dir():
-        args.dflow_history = next(args.dflow_history.glob("*_his.nc"))
+    # Determine type based on detected filename patterns
+    if args.model.is_dir():
+        is_dflow = list(args.model.glob("FlowFM_*_his.nc"))
+        is_schism = list(args.model.glob("out2d*.nc"))
+        if is_dflow:
+            args.model = is_dflow
+            args.model_type = "dflow"
+        elif is_schism:
+            args.model = is_schism
+            args.model_type = "schism"
+        else:
+            raise RuntimeError("Uknown filename pattern for model")
     else:
-        args.dflow_history = args.dflow_history
+        if args.model.match("FlowFM_*_his.nc"):
+            args.model_type = "dflow"
+        elif args.model.match("out2d*.nc"):
+            args.model_type = "schism"
+        else:
+            raise RuntimeError("Unknown filename pattern for model")
 
     if not have_pytides and args.tide:
         raise RuntimeError("PyTides needs to be installed for tidal constituent solving")
