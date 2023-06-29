@@ -39,11 +39,10 @@ def open_csv(filename):
     return df
 
 
-def plot_models(output_dir, models, obs=None, datum=None):
+def plot_models(output_dir, station, models, obs=None, datum=None):
     if not models:
         return
     _tmp = next(iter(models.values()))
-    station = _tmp.stations.item().decode().strip()
     year = _tmp.time[0].values.astype("datetime64[Y]").item().year
     fig = plt.figure(figsize=(10, 5))
     ax = plt.gca()
@@ -233,7 +232,7 @@ def main(args):
                 
             model_data[f] = data    
         else:
-            plot_models(args.output, model_data, obs=obsdata, datum=datum)
+            plot_models(args.output, st, model_data, obs=obsdata, datum=datum)
 
     # Release resources
     for wl in history_files.values():
