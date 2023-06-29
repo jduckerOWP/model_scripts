@@ -221,19 +221,17 @@ def main(args):
             if t == 1:
                 # Dflow file
                 data = select_dflow_sites(d, st, time_indexer=dtime_idx)
+                if data.sizes['stations'] == 0:
+                    print("Skipping station with no data", st)
+                    continue
+                elif data.sizes['stations'] > 1:
+                    print("Skipping station because of duplicate data:", st)
+                    break
             elif t == 2:
                 # SCHISM file
                 data = select_schism_nodes(d, json.loads(metadata.loc['Nodes']), time_indexer=stime_idx)
                 
-            # Check if empty data
-            if data.sizes['stations'] == 1:
-                model_data[f] = data
-            elif data.sizes['stations'] == 0:
-                print("Skipping station with no data", st)
-                continue
-            else:
-                print("Skipping station because of duplicate data:", st)
-                break
+            model_data[f] = data    
         else:
             plot_models(args.output, model_data, obs=obsdata, datum=datum)
 
