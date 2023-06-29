@@ -457,7 +457,7 @@ def maxlim(model, obs):
 
 def open_his_waterlevel(fn):
     with xr.open_mfdataset(fn) as ds:
-        ds['station_name'] = ds.station_name.str.strip()
+        ds['station_name'] = ds.station_name.compute().str.strip()
         waterlevel = ds.waterlevel
         waterlevel = waterlevel.set_index(stations='station_name').sortby('stations')
         return waterlevel
