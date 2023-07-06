@@ -611,6 +611,7 @@ def main(args):
 
         measures = (d.bias(), d.corr()[0], d.rmse(), d.nrmse(), d.skill())
         # add timeseries statistics
+        summary.append((d.station_id,) + measures)
         measures = tuple(round(x, 3) for x in measures)
         stat_str = f"Bias: {measures[0]}\nCorr: {measures[1]}\nRMSE: {measures[2]}\nNRMSE: {measures[3]}\nSkill: {measures[4]}"
         ax.annotate(stat_str, xy=(0.825, 0.06), 
@@ -632,7 +633,7 @@ def main(args):
         wl.close()
 
     #Filter summary and tidal_summary (if necessary) by skill
-    summary_df = pd.DataFrame(summary, columns=['station_id', 'bias', 'corr', 'rmse', 'nrmse', 'skill', 'pass_90_accuracy', 'pvalue'])
+    summary_df = pd.DataFrame(summary, columns=['station_id', 'bias', 'corr', 'rmse', 'nrmse', 'skill'])
     summary_df["idx"] = list(range(len(summary)))
     #summary_df = summary_df.groupby('station_id').apply(lambda x: x.iloc[x.skill.argmax()])
     sel_idx = set(summary_df["idx"])
