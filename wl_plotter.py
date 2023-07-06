@@ -428,7 +428,7 @@ def open_csv(filename):
     else:
         rname = 'prediction'
     df = obs_ds.loc[:, [date_label, value_label]].rename(columns={date_label: "date", value_label: rname})
-    df["date"] = pd.to_datetime(df["date"], infer_datetime_format=True)
+    df["date"] = pd.to_datetime(df["date"])
     df = df.loc[pd.notna(df["date"])]
     df = df.set_index("date").sort_index().tz_localize(None)
 
