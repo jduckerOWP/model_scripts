@@ -483,12 +483,12 @@ def select_schism_nodes(data, indexer):
     return model
 
 def select_dflow_sites(data, indexer):
-    index = data.station_name.str.strip().astype(str).values
+    index = data.stations.str.strip().values
     waterlevel = data[:, index == indexer]
 
-    model = model.drop_vars(['station_x_coordinate', 'station_y_coordinate', 'stations'])
+    model = waterlevel.drop_vars(['station_x_coordinate', 'station_y_coordinate', 'stations'])
     model = model.to_dataframe().rename(columns={"waterlevel": "model"})
-    return waterlevel
+    return model
     
 
 def read_correspondence_table(path, storms):
@@ -532,7 +532,7 @@ def main(args):
     elif args.model_type == "dflow":
         waterlevels = open_his_waterlevel(args.model)
         mlabel = "DFlow"
-        
+    
     for station in correspond.index:
         metadata = correspond.loc[station]
         fn = metadata["ProcessedCSVLoc"]
