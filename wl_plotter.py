@@ -479,7 +479,7 @@ def select_schism_nodes(data, indexer):
     _elevation = data[:, indexer]
     _elevation = _elevation.mean(axis=1)
 
-    model = _elevation.to_dataframe().rename(columns={'elevation': 'model'})
+    model = _elevation.squeeze().to_dataframe().rename(columns={'elevation': 'model'})
     return model
 
 def select_dflow_sites(data, indexer):
@@ -487,7 +487,7 @@ def select_dflow_sites(data, indexer):
     waterlevel = data[:, index == indexer]
 
     model = waterlevel.drop_vars(['station_x_coordinate', 'station_y_coordinate', 'stations'])
-    model = model.to_dataframe().rename(columns={"waterlevel": "model"})
+    model = model.squeeze().to_dataframe().rename(columns={"waterlevel": "model"})
     return model
     
 
