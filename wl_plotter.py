@@ -585,7 +585,7 @@ def main(args):
         # Drop leading/trailing nans from obs
         joined = model_data.join(obs_data, how='inner').sort_index().dropna()
         if joined.empty:
-            print("Joined dataframe is empty")
+            print("Joined dataframe is empty for station", station)
             continue                
         
         d = TSData(metadata['Datum'], station, joined, bias_correct=args.bias_correct)
