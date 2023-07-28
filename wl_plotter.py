@@ -419,7 +419,7 @@ def open_csv(filename):
     values_col = obs_ds.columns.isin(possible_data)
 
     if np.count_nonzero(date_col) != 1 and np.count_nonzero(values_col) != 1:
-        raise RuntimeError("Unknown CSV format")
+        raise RuntimeError(f"Unknown CSV format: {filename}")
     
     date_label = obs_ds.columns[date_col][0]
     value_label = obs_ds.columns[values_col][0]
