@@ -518,7 +518,7 @@ def read_correspondence_table(path, storms):
 
 
 def main(args):
-    twelve = datetime.timedelta(hours=12)
+    cutter = datetime.timedelta(hours=args.cut)
     summary = []
     tidal_summary = []
 
@@ -553,7 +553,7 @@ def main(args):
         if np.isnan(model.values).all():
             continue
         
-        T = model.index[model.index >= model.index[0]+twelve]
+        T = model.index[model.index >= model.index[0]+cutter]
         # drop first twelve hours of model to remove warmup effects
         model = model.loc[T]
         model.index = model.index.tz_localize(None)
@@ -652,6 +652,7 @@ def get_options():
     
     parser.add_argument('model', type=pathlib.Path, help='Model timeseries file/directory')
     parser.add_argument('--output', default=pathlib.Path(), type=pathlib.Path, help="Output directory")
+    parser.add_argument('--cut', default=12, type=int, help='Number of hours to remove from head of timeseries')
     parser.add_argument('-t', '--tide', action='store_true', default=False, help='Solve tidal for tidal constituents')
     parser.add_argument('-b', '--bias-correct', action='store_true', help="Bias correct all stations")
     parser.add_argument('-s', '--storm', default=['Any'], action='append', help="Storm filter")

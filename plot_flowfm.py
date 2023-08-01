@@ -1,5 +1,6 @@
 import argparse
 import pathlib
+import datetime
 import numpy as np
 import xarray as xr
 import pandas as pd
@@ -39,7 +40,7 @@ def open_csv(filename):
     return df
 
 
-def plot_models(output_dir, station, models, obs=None, datum=None):
+def plot_models(output_dir, station, models, cutter, obs=None, datum=None):
     if not models:
         return
     _tmp = next(iter(models.values()))
@@ -50,6 +51,7 @@ def plot_models(output_dir, station, models, obs=None, datum=None):
 
     # Find timespan that covers all model data
     start = min(pd.Timestamp(d.time.values[0]).tz_localize(None) for d in models.values())
+    start = start + cutter
     end = max(pd.Timestamp(d.time.values[-1]).tz_localize(None) for d in models.values())
 
     if obs is not None:
@@ -168,6 +170,8 @@ def read_correspondence_table(path, storms):
 
 
 def main(args):
+    cutter = datetime.timedelta(hours=args.cut)
+
     filehandles = []
     history_files = {}
     stimes = dtimes = None
@@ -229,10 +233,10 @@ def main(args):
             elif t == 2:
                 # SCHISM file
                 data = select_schism_nodes(d, json.loads(metadata.loc['Nodes']), time_indexer=stime_idx)
-                
+
             model_data[f] = data    
         else:
-            plot_models(args.output, st, model_data, obs=obsdata, datum=datum)
+            plot_models(args.output, st, model_data, cutter, obs=obsdata, datum=datum)
 
     # Release resources
     for wl in history_files.values():
@@ -245,6 +249,7 @@ def get_options():
     parser = argparse.ArgumentParser()
 
     parser.add_argument("-o", "--output", type=pathlib.Path, help="output folder")
+    parser.add_argument('--cut', default=12, type=int, help="Number of hours to remove from head of timeseries")
     parser.add_argument("--obs", type=pathlib.Path, help="data folder")
     parser.add_argument("--correspond", type=pathlib.Path, required=True, help='Data correspondence table')
     parser.add_argument("model", nargs='+', type=pathlib.Path, help="model folders")
