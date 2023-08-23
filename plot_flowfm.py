@@ -90,20 +90,6 @@ def detect_model_labels(models):
             return rv
         models = tuple(m.parent for m in models)
 
-def align_times(t1, t2):
-    """Perform an inner join on t1 and t2.
-    
-    Returns a tuple of indices that can be used to select the matching elements
-    """
-    a = []
-    b = []
-    lut = dict(zip(t1, range(len(t1))))
-    for _i2, _t2 in enumerate(t2):
-        if _t2 in lut:
-            a.append(lut[_t2])
-            b.append(_i2)
-    return a, b
-
 
 def select_schism_nodes(data, indexer, time_indexer=None):
     if time_indexer is None:
@@ -174,7 +160,6 @@ def main(args):
 
     filehandles = []
     history_files = {}
-    stimes = dtimes = None
     for label, d in zip(detect_model_labels(args.model), args.model):
         if is_dflow(d):
             hfile = d/"FlowFM_0000_his.nc"
@@ -184,7 +169,6 @@ def main(args):
             wl = fh.waterlevel
             wl = wl.set_index(stations='station_name').sortby('stations')
             history_files[(1, label)] = wl
-            dtimes = fh.time.values
         elif is_schism(d):
             outs = list(d.glob("out2d*.nc"))
             if len(outs) > 1:
@@ -198,11 +182,6 @@ def main(args):
             history_files[(2, label)] = wl
         else:
             raise RuntimeError(f"Unknown model type {d}")
-
-    if stimes is not None and dtimes is not None:
-        stime_idx, dtime_idx = align_times(stimes, dtimes)
-    else:
-        stime_idx = dtime_idx = slice(None)
 
     # load the correspondence table
     correspond = read_correspondence_table(args.correspond, args.storm)
@@ -223,7 +202,7 @@ def main(args):
         for (t, f), d in history_files.items():
             if t == 1:
                 # Dflow file
-                data = select_dflow_sites(d, st, time_indexer=dtime_idx)
+                data = select_dflow_sites(d, st, time_indexer=None)
                 if data.sizes['stations'] == 0:
                     print("Skipping station with no data", st)
                     continue
@@ -232,7 +211,7 @@ def main(args):
                     break
             elif t == 2:
                 # SCHISM file
-                data = select_schism_nodes(d, json.loads(metadata.loc['Nodes']), time_indexer=stime_idx)
+                data = select_schism_nodes(d, json.loads(metadata.loc['Nodes']), time_indexer=None)
 
             model_data[f] = data    
         else:
