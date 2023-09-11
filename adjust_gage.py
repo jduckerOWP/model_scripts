@@ -23,7 +23,13 @@ CORRECTIONS = None
 COL_MAP = {'streamflow (ft^3/s)': 'streamflow (m^3/s)',
             'gage height (ft)': 'gage height (m)',
             "Elevation ocean/est (ft NAVD88)": "Elevation ocean/est (m NAVD88)",
-            "Water Level (ft)": "Water Level (m)"}
+            "Water Level (ft)": "Water Level (m)",
+            "Water surface elevation above NGVD1929 (ft)": "Water surface elevation (m NGVD1929)"}
+
+DEPTH_COLS = ['gage height (m)',
+            'Elevation ocean/est (m NAVD88)',
+            'Water Level (m)',
+            'Water surface elevation (m NGVD1929)']
             
 
 def real_stem(path):
@@ -46,7 +52,7 @@ def adjusted_fn(path):
 def get_options():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("corrections", type=pathlib.Path, help="Path to corrections CSV")
+    parser.add_argument("--corrections", type=pathlib.Path, help="Path to corrections CSV")
     parser.add_argument("data_dir", type=pathlib.Path, help="Path to USGS data directory")
     parser.add_argument("output_dir", type=pathlib.Path, help="Path to output directory")
 
@@ -73,12 +79,15 @@ def load_corrections(corrections):
     A global variable used here to avoid serializing and passing corrections
     file to each worker process"""
     global CORRECTIONS
-    CORRECTIONS = pd.read_csv(corrections, index_col='Gage ID',
-                            usecols=['Gage ID', 'Datum correction (m)', 'Gage datum (m)']).sort_index()
-    # Check to make sure index is unique
-    if CORRECTIONS.index.has_duplicates:
-        print(CORRECTIONS.index[CORRECTIONS.index.duplicated()].tolist())
-        raise RuntimeError("Corrections has duplicate gage ids")
+    if corrections:
+        CORRECTIONS = pd.read_csv(corrections, index_col='Gage ID',
+                                usecols=['Gage ID', 'Datum correction (m)', 'Gage datum (m)']).sort_index()
+        # Check to make sure index is unique
+        if CORRECTIONS.index.has_duplicates:
+            print(CORRECTIONS.index[CORRECTIONS.index.duplicated()].tolist())
+            raise RuntimeError("Corrections has duplicate gage ids")
+    else:
+        CORRECTIONS = pd.DataFrame()
 
 
 def adjust_station(path, out_path, only_write_adjusted=False):
@@ -122,11 +131,12 @@ def compute_stats(df):
     return df[df.columns.intersection(COL_MAP.values())].describe()
 
 
-def main(args):    
+def main(args):
     load_corrections(args.corrections)
 
     # create output_directory if it doesn't exist
-    args.output_dir.mkdir(parents=True)
+    if not args.output_dir.exists():
+        args.output_dir.mkdir(parents=True)
     
     #with concurrent.futures.ThreadPoolExecutor(initializer=load_corrections, initargs=(args.corrections,)) as executor:
     with concurrent.futures.ThreadPoolExecutor() as executor:
