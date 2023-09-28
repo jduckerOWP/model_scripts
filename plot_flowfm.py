@@ -65,7 +65,7 @@ def plot_models(output_dir, station, models, cutter, obs=None, datum=None):
     
     colors = ('blue', 'black', 'green', 'purple', 'cyan')
     for c, (f, d) in zip(colors, models.items()):
-        d = d.sel({'time': slice(start.tz_localize(None), end.tz_localize(None))})
+        d = d.sel({'time': slice(start, end)})
         if pd.isna(d.values).all():
             # Skip models that are null
             continue
