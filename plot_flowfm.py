@@ -54,6 +54,10 @@ def plot_models(output_dir, station, models, cutter, obs=None, datum=None):
     start = start + cutter
     end = max(pd.Timestamp(d.time.values[-1]).tz_localize(None) for d in models.values())
 
+    # check that start < end
+    if end < start:
+        print(f"End time {end} is before start time {start}. Try reducing the size of cut")
+
     if obs is not None:
         obs = obs.loc[start:end]
         if pd.notna(obs.values).any():
