@@ -113,9 +113,9 @@ def main(args):
 
     print("creating river shapes...")
     make_river_map(
-        tif_fnames = [args.dem],
+        tif_fnames = [str(args.dem)],
         thalweg_shp_fname = str(thalwegs_out),
-        output_dir = args.output,
+        output_dir = str(args.output)
     )
 
 
