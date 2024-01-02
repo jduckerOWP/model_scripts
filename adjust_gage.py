@@ -26,11 +26,6 @@ COL_MAP = {'streamflow (ft^3/s)': 'streamflow (m^3/s)',
             "Water Level (ft)": "Water Level (m)",
             "Water surface elevation above NGVD1929 (ft)": "Water surface elevation (m NGVD1929)",
             "Stream water level elevation above NAVD 1988, in feet": "Stream water level elevation above NAVD 1988 (m)"}
-
-DEPTH_COLS = ['gage height (m)',
-            'Elevation ocean/est (m NAVD88)',
-            'Water Level (m)',
-            'Water surface elevation (m NGVD1929)']
             
 
 def real_stem(path):
