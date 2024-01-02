@@ -17,7 +17,10 @@ import matplotlib.colors as mcolors
 def open_csv(filename):
     possible_dates = ["Date (utc)", "Date Time", "Date and Time (GMT)"]
     possible_data = ["gage height (m)", "Water Level", 
-                    "Water level (m NAVD88)", "Elevation ocean/est (m NAVD88)", "Prediction"]
+                    "Water level (m NAVD88)", 
+                    "Elevation ocean/est (m NAVD88)", 
+                    "Prediction",
+                    "Stream water level elevation above NAVD 1988 (m)"]
 
     obs_ds = pd.read_csv(filename, low_memory=False)
     # Remove possible spaces in column names
