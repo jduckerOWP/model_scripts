@@ -24,7 +24,7 @@ def get_options():
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--threshold", type=float, default=5, help="Accumulation threshold")
-    parser.add_argument("--epsilon-fill", type=bool, default=False, help="Epsilon filling can help sometimes.")
+    parser.add_argument("--epsilon-fill", action='store_true', default=False, help="Epsilon filling can help sometimes.")
     parser.add_argument("-o", "--output", type=pathlib.Path, default=".", help="Output directory")
     parser.add_argument("dem", type=pathlib.Path, help="DEM to process")
 
