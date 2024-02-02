@@ -207,7 +207,7 @@ def buffer_to_dict2(path):
         #NOPE = list(map(str.strip, line.split("=")))
 
         NOPE = int(next(buf).split()[0])
-    except IndexError:
+    except (IndexError, StopIteration):
         return {'description': description,
                 'nodes': nodes,
                 'elements': elements}
