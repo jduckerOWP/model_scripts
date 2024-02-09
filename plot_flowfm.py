@@ -36,7 +36,7 @@ def open_csv(filename):
     date_label = obs_ds.columns[date_col][0]
     value_label = obs_ds.columns[values_col][0]
     df = obs_ds.loc[:, [date_label, value_label]].rename(columns={date_label: "date", value_label: "measurement"})
-    df["date"] = pd.to_datetime(df["date"], infer_datetime_format=True)
+    df["date"] = pd.to_datetime(df["date"])
     df = df.loc[pd.notna(df["date"])]
     df = df.set_index("date").sort_index().tz_localize(None)
 
