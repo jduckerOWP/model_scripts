@@ -473,7 +473,8 @@ def open_schism_elevation(fn):
 
     with xr.open_mfdataset(fn) as ds:
         elevation = ds.elevation
-        elevation["time"] = convert_schism_time(elevation["time"])  
+        if elevation['time'].dtype.kind != "M":
+            elevation["time"] = convert_schism_time(elevation["time"])
         return elevation
 
 def select_schism_nodes(data, indexer):

@@ -183,8 +183,9 @@ def main(args):
             else:
                 fh = xr.open_dataset(outs[0])
             filehandles.append(fh)
-            stimes = convert_schism_time(fh['time'])
-            fh['time'] = stimes
+            if fh['time'].dtype.kind != "M":
+                stimes = convert_schism_time(fh['time'])
+                fh['time'] = stimes
             wl = fh.elevation
             history_files[(2, label)] = wl
         else:
