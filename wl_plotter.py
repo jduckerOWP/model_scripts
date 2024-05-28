@@ -467,8 +467,11 @@ def open_his_waterlevel(fn):
     
 def open_schism_elevation(fn):
     def convert_schism_time(times):
-        base_date = times.base_date.split()
-        rv = cftime.num2date(times.values, f"seconds since {'-'.join(base_date[:3])}")
+        _date_parts = times.base_date.split()
+        base_date = datetime.datetime(*map(int, _date_parts[:3]))
+        if len(_date_parts) >= 4:
+            base_date += datetime.timedelta(hours=float(_date_parts[3]))
+        rv = cftime.num2date(times.values, f"seconds since {base_date.isoformat()}")
         return rv.astype('datetime64[ns]')
 
     with xr.open_mfdataset(fn) as ds:
