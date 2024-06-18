@@ -16,17 +16,18 @@ import numpy as np
 import argparse
 import pathlib
 import itertools
+from collections import ChainMap
 import concurrent.futures
 
 CORRECTIONS = None
 
-COL_MAP = {'streamflow (ft^3/s)': 'streamflow (m^3/s)',
-            'gage height (ft)': 'gage height (m)',
+VOLUMES = {'streamflow (ft^3/s)': 'streamflow (m^3/s)'}
+LENGTH = {'gage height (ft)': 'gage height (m)',
             "Elevation ocean/est (ft NAVD88)": "Elevation ocean/est (m NAVD88)",
             "Water Level (ft)": "Water Level (m)",
             "Water surface elevation above NGVD1929 (ft)": "Water surface elevation (m NGVD1929)",
             "Stream water level elevation above NAVD 1988, in feet": "Stream water level elevation above NAVD 1988 (m)"}
-            
+COL_MAP = ChainMap(VOLUMES, LENGTH)
 
 def real_stem(path):
     return path.name[:len(path.name) - sum(map(len, path.suffixes))]
@@ -99,9 +100,14 @@ def adjust_station(path, out_path, only_write_adjusted=False):
     data = pd.read_csv(path, low_memory=False)
     data = data.rename(columns=COL_MAP)
 
-    for c in COL_MAP.values():
+    for k, c in COL_MAP.items():
         if c in data:
-            data[c] = ft_to_m(data[c])
+            if k in VOLUMES:
+                print("Converting volume", c)
+                data[c] = ft3_to_m3(data[c])
+            elif k in LENGTH:
+                print("Converting height", c)
+                data[c] = ft_to_m(data[c])
     print(" "*80, end="\r")
 
     if 'gage height (m)' in data.columns:
