@@ -1,6 +1,6 @@
 import pyvista as pv
 from pyvista import _vtk
-from pyvista.plotting.opts import ElementType
+#from pyvista.plotting.opts import ElementType
 import xarray as xr
 import numpy as np
 
@@ -11,7 +11,6 @@ import datetime
 import cftime
 import time
 
-DATA_DIR = pathlib.Path("../../../data/SCHISM_LakeC")
 
 def get_options():
     parser = argparse.ArgumentParser()
