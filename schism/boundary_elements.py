@@ -142,8 +142,8 @@ def main(args):
     rv.reset_index().set_index("Node").to_csv(f"{args.out_prefix}element_mapping.csv")
     
     with open(f"{args.out_prefix}source_sink_BMI.in", 'w') as out:
-        srcs = (pts.START_DomLoc == "out") & (pts.END_DomLoc == "in")
-        sinks = (pts.START_DomLoc == "in") & (pts.END_DomLoc == "out")
+        srcs = pts.FlowDir == 1
+        sinks = pts.FlowDir == -1
         
         for m in (srcs, sinks):            
             out.write(f"{np.count_nonzero(m)}\n")
