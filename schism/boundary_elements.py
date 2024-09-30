@@ -124,7 +124,7 @@ def main(args):
     print("Mapping ids to elements...")
     rv = {}
     nodes = {}
-    for i, _id in enumerate(pts.id):
+    for i, _id in enumerate(pts.flowpath_id):
         enodes = element_nodes[i]
         elidx = np.isin(elements, enodes).sum(axis=1).argmax()
         nwmel = elements_ids[elidx]
@@ -132,12 +132,12 @@ def main(args):
         nodes[_id] = elements[elidx]
        
     rv = pd.DataFrame({'Element': rv, 'Node': nodes}, index=pd.Index(rv.keys(), name='Id'))
-    pts = pts.set_index('id')
-    rv['Poi'] = pts['hl_link']
+    pts = pts.set_index('flowpath_id')
+    rv['Poi'] = pts['poi_id']
     rv = rv.explode("Node")
     coords = mesh['nodes'].loc[rv.Node.unique(), ["x", "y"]].rename(columns={"x": "Longitude", "y": "Latitude"})
     rv = rv.merge(coords, left_on="Node", how="left", right_index=True)
-    m = pts.START_DomLoc != pts.END_DomLoc
+    m = (pts.FlowDir == 1) | (pts.FlowDir == -1)
     rv = rv.loc[m]
     rv.reset_index().set_index("Node").to_csv(f"{args.out_prefix}element_mapping.csv")
     
@@ -148,7 +148,7 @@ def main(args):
         for m in (srcs, sinks):            
             out.write(f"{np.count_nonzero(m)}\n")
             els = rv.loc[m, "Element"]
-            nids = pts.loc[m, "hl_link"]
+            nids = pts.loc[m, "poi_id"]
             for e, i in zip(els.values, nids.values):
                 out.write(f"{e} {i}\n")
         
